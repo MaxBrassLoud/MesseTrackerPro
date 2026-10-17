@@ -1,10 +1,16 @@
 """Lokaler Flask-Server für Smartphone-Anbindung."""
+import io
 import threading
 import uuid
 from pathlib import Path
-from flask import Flask, request, render_template_string, redirect, url_for
 
-from config import WEB_HOST, WEB_PORT, CARDS_DIR
+from flask import (Flask, request, render_template_string, redirect,
+                   url_for, session)
+from PIL import Image
+
+from config import (
+    WEB_HOST, WEB_PORT, CARDS_DIR, ALLOWED_IMAGE_EXTENSIONS, MAX_UPLOAD_MB
+)
 from ui.themes import get_theme, build_web_css
 
 
@@ -98,6 +104,7 @@ SCAN_BODY = """
     </div>
     <form method="post" action="/api/{{ token }}/attendance"
           onsubmit="return showConfirm(this, 'Du möchtest den Stand jetzt verlassen?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="event_type" value="leave">
       <button type="submit" class="alt">Stand verlassen</button>
     </form>
@@ -108,6 +115,7 @@ SCAN_BODY = """
     </div>
     <form method="post" action="/api/{{ token }}/attendance"
           onsubmit="return showConfirm(this, 'Du möchtest den Stand jetzt betreten?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="event_type" value="enter">
       <button type="submit">Stand betreten</button>
     </form>
@@ -121,6 +129,7 @@ SCAN_BODY = """
     hinzufügen oder beides kombinieren.
   </p>
   <form method="post" action="/api/{{ token }}/submit" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input name="name" placeholder="Name">
     <input name="company" placeholder="Firma">
     <input name="position" placeholder="Position">
@@ -181,9 +190,65 @@ def _active_employee(db, token):
     return emp, None
 
 
+def _validate_image(file_storage):
+    """Prüft, ob die hochgeladene Datei ein echtes Bild ist.
+
+    Nutzt PIL, um den tatsächlichen Bildinhalt zu verifizieren – nicht
+    nur die Dateiendung. Nach dem Verify wird der Stream zurückgesetzt,
+    damit die Datei anschließend regulär gespeichert werden kann.
+    """
+    try:
+        img = Image.open(file_storage.stream)
+        img.verify()
+        file_storage.seek(0)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def _save_upload(file_storage, req_id: str):
+    """Speichert einen validierten Upload und gibt den Pfad zurück."""
+    ext = Path(file_storage.filename).suffix.lower()
+    target = CARDS_DIR / f"{req_id}{ext}"
+    if not target.exists():
+        file_storage.save(target)
+    return str(target)
+
+
 def create_app(db):
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+    # Persistenter Secret-Key wird aus der DB-Meta gelesen (siehe init_db);
+    # Fallback auf os.urandom würde Sessions bei jedem Start invalidieren.
+    app.secret_key = (
+        db.get_setting("web_secret_key") or uuid.uuid4().hex
+    )
+    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+    def _generate_csrf_token():
+        if "_csrf_token" not in session:
+            session["_csrf_token"] = uuid.uuid4().hex
+        return session["_csrf_token"]
+
+    app.jinja_env.globals["csrf_token"] = _generate_csrf_token
+
+    @app.before_request
+    def csrf_protect():
+        """Prüft bei allen POSTs das CSRF-Token."""
+        if request.method == "POST":
+            token = session.get("_csrf_token")
+            form_token = request.form.get("csrf_token")
+            if not token or not form_token or token != form_token:
+                return (
+                    '<div class="err" style="margin:20px;padding:16px;'
+                    'border-radius:10px;background:#a30;color:#fff;">'
+                    '<b>CSRF-Token ungültig oder abgelaufen.</b><br>'
+                    'Bitte lade die Seite neu und versuche es erneut.'
+                    '</div>',
+                    400,
+                )
+        return None
 
     def _active_fair_day():
         return db.get_active_fair_day()
@@ -259,7 +324,6 @@ def create_app(db):
         if status not in valid:
             status = valid[0] if valid else "Interessiert"
 
-        # Datei prüfen
         file = request.files.get("image")
         has_photo = file is not None and file.filename != ""
         has_fields = any([name, company, position, phone, email, notes])
@@ -270,22 +334,28 @@ def create_app(db):
                 'oder ein Foto hinzufügen.</div>'
                 f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
-        # Foto speichern, falls vorhanden
         image_path = None
         req_id = request.form.get("request_id") or uuid.uuid4().hex
         if has_photo:
+            # 1. Dateiendung prüfen
             ext = Path(file.filename).suffix.lower()
-            if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+            if ext not in ALLOWED_IMAGE_EXTENSIONS:
                 return _page(db, emp=emp, body=(
-                    '<div class="err">Dateityp nicht erlaubt (JPG, PNG, '
-                    'WEBP).</div>'
+                    '<div class="err">Dateityp nicht erlaubt. Erlaubt sind: '
+                    f'{", ".join(sorted(ALLOWED_IMAGE_EXTENSIONS))}.</div>'
                     f'<p><a href="/scan/{token}" class="link">← Zurück</a>'
                     '</p>')), 400
-            target = CARDS_DIR / f"{req_id}{ext}"
+            # 2. Tatsächlichen Bildinhalt prüfen
+            ok, img_err = _validate_image(file)
+            if not ok:
+                return _page(db, emp=emp, body=(
+                    '<div class="err">Die hochgeladene Datei ist kein '
+                    f'gültiges Bild ({img_err}).</div>'
+                    f'<p><a href="/scan/{token}" class="link">← Zurück</a>'
+                    '</p>')), 400
+            # 3. Speichern
             try:
-                if not target.exists():
-                    file.save(target)
-                image_path = str(target)
+                image_path = _save_upload(file, req_id)
             except Exception as e:
                 return _page(db, emp=emp, body=(
                     f'<div class="err">Foto konnte nicht gespeichert '
@@ -304,7 +374,6 @@ def create_app(db):
                 return _page(db, emp=emp, body=(
                     f'<div class="err">Speichern fehlgeschlagen: {e}</div>')), 500
 
-            # Karte ins Archiv legen (als verarbeitet markiert)
             try:
                 card, created = db.enqueue_card(
                     fair_id=ad["fair_id"], image_path=image_path,
@@ -318,7 +387,6 @@ def create_app(db):
                         ocr_position=position, ocr_phone=phone,
                         ocr_email=email)
             except Exception:
-                # Kontakt ist gespeichert, das ist der wichtigste Teil
                 pass
 
             return _page(db, emp=emp, body=(

@@ -167,6 +167,14 @@ class EmployeesPage(QWidget):
         self.btn_toggle.clicked.connect(self.toggle_active)
         act.addWidget(self.btn_toggle)
 
+        # NEU: Token-Regenerierung
+        self.btn_regen = QPushButton("Token erneuern")
+        self.btn_regen.setObjectName("Ghost")
+        self.btn_regen.setToolTip(
+            "Macht den bisherigen QR-Code ungültig und erzeugt einen neuen.")
+        self.btn_regen.clicked.connect(self.regenerate_token)
+        act.addWidget(self.btn_regen)
+
         refresh = QPushButton("Aktualisieren")
         refresh.setObjectName("Ghost")
         refresh.clicked.connect(self.refresh)
@@ -181,6 +189,7 @@ class EmployeesPage(QWidget):
         has_sel = self.table.currentRow() >= 0
         self.btn_qr.setEnabled(has_sel)
         self.btn_toggle.setEnabled(has_sel)
+        self.btn_regen.setEnabled(has_sel)
 
     def refresh(self):
         emps = self.ctx.db.list_employees()
@@ -261,7 +270,6 @@ class EmployeesPage(QWidget):
                 "Startseite einen Messetag starten – sonst schlagen "
                 "Uploads und Statuswechsel fehl.")
 
-        # Prüfen, ob der Mitarbeiter aktiv ist
         emp = self.ctx.db.get_employee_by_token(token)
         if emp and not emp.get("active"):
             warnings.append(
@@ -278,3 +286,29 @@ class EmployeesPage(QWidget):
         self.ctx.db.update_employee(
             emp["id"], active=0 if emp.get("active") else 1)
         self.refresh()
+
+    def regenerate_token(self):
+        """Erzeugt einen neuen Token und invalidiert den alten QR-Code."""
+        emp = self._selected_employee()
+        if not emp:
+            return
+        if QMessageBox.question(
+                self, "Token erneuern",
+                f"Der bisherige QR-Code für „{emp['name']}“ wird ungültig. "
+                "Ein neuer Token wird erzeugt. Fortfahren?",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            new_token = self.ctx.db.regenerate_employee_token(emp["id"])
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Fehler",
+                f"Token konnte nicht erneuert werden:\n{e}")
+            return
+        self.refresh()
+        if QMessageBox.question(
+                self, "Token erneuert",
+                "Neuer Token wurde erzeugt. Der alte QR-Code funktioniert "
+                "nicht mehr.\n\nJetzt neuen QR-Code anzeigen?",
+                QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+            self.show_qr_for_token(new_token, emp["name"])

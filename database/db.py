@@ -14,9 +14,21 @@ def now_iso() -> str:
 class Database:
     def __init__(self, path: str):
         self._lock = threading.RLock()
-        self.conn = sqlite3.connect(path, check_same_thread=False)
+        # check_same_thread=False + RLock: eine Verbindung, mehrere Threads.
+        # timeout=30: SQLite wartet bei Lock-Konflikten bis zu 30 s,
+        # statt sofort mit "database is locked" abzubrechen.
+        self.conn = sqlite3.connect(
+            path, check_same_thread=False, timeout=30
+        )
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys=ON")
+        # NEU: WAL-Modus erlaubt parallele Leser während eines Schreibers
+        # und reduziert Lock-Konflikte zwischen Desktop und Webserver.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        # NORMAL ist mit WAL sicher und schneller als FULL.
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        # Busy-Timeout zusätzlich auf SQLite-Ebene (Millisekunden).
+        self.conn.execute("PRAGMA busy_timeout=30000")
 
     # ---------- Setup / Migration ----------
     def init_db(self):
@@ -37,7 +49,15 @@ class Database:
                     "UPDATE app_meta SET value=? WHERE key='schema_version'",
                     (str(SCHEMA_VERSION),))
             self.conn.execute(
-                "INSERT OR IGNORE INTO app_meta(key,value) VALUES('theme','Flipper')")
+                "INSERT OR IGNORE INTO app_meta(key,value) "
+                "VALUES('theme','Flipper')")
+            # NEU: Persistenter Secret-Key für Flask-Sessions (CSRF-Schutz).
+            # Einmalig erzeugt, danach unverändert – so bleiben Sessions
+            # über Neustarts hinweg gültig.
+            self.conn.execute(
+                "INSERT OR IGNORE INTO app_meta(key,value) "
+                "VALUES('web_secret_key', ?)",
+                (uuid.uuid4().hex,))
 
     def _migrate_contacts_if_needed(self):
         row = self.conn.execute(
@@ -302,6 +322,19 @@ class Database:
             row = self.conn.execute(
                 "SELECT * FROM employees WHERE token=?", (token,)).fetchone()
             return dict(row) if row else None
+
+    # NEU: Token-Regenerierung. Der alte Token wird sofort ungültig,
+    # d. h. bereits verteilte QR-Codes funktionieren nicht mehr.
+    def regenerate_employee_token(self, emp_id: int) -> str:
+        """Erzeugt einen neuen Token und macht den alten ungültig."""
+        new_token = uuid.uuid4().hex
+        with self._lock, self.conn:
+            cur = self.conn.execute(
+                "UPDATE employees SET token=? WHERE id=?",
+                (new_token, emp_id))
+            if cur.rowcount == 0:
+                raise ValueError(f"Mitarbeiter-ID {emp_id} existiert nicht.")
+        return new_token
 
     # ---------- Contacts ----------
     def create_contact(self, fair_id, source, employee_id=None, fair_day_id=None,

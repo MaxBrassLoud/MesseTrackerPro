@@ -1,3 +1,4 @@
+# config.py
 import os
 from pathlib import Path
 
@@ -10,7 +11,6 @@ BACKUP_DIR = DATA_DIR / "backups"
 for d in (DATA_DIR, CARDS_DIR, BACKUP_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-# Nur noch als Seed für die Erstinstallation / Migration
 DEFAULT_STATUSES = ["Interessiert", "Anfrage", "Auftrag erteilt"]
 DEFAULT_THEME = "Flipper"
 
@@ -19,3 +19,10 @@ PROCESSING_STATES = ["ok", "needs_review"]
 
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8765
+
+# NEU: Sicherheit & Backups
+CSRF_ENABLED = True
+BACKUP_ROTATION_COUNT = 10          # Anzahl automatischer Backups
+BACKUP_AUTO_INTERVAL_HOURS = 24     # Automatisches Backup alle X Stunden
+MAX_UPLOAD_MB = 20                  # Maximale Uploadgröße
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
