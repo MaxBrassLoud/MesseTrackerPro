@@ -143,31 +143,45 @@ def main():
           f"{' (Admin)' if user.get('is_admin') else ''}")
     print()
 
-    # 6. Hauptfenster; Exit-Code 42 bedeutet Abmelden, nicht Programmende.
+    # 6. Hauptfenster; Exit-Code 42 bedeutet Benutzerwechsel, nicht Programmende.
+    w = None
+    last_code = 0
     while True:
         w = MainWindow(db, auth, user, session_token)
         w.show()
-        code = app.exec_()
-        if code != 42:
-            break
-        try:
-            auth.logout(session_token)
-        except Exception:
-            pass
-        from ui.login_dialog import LoginDialog
-        dlg = LoginDialog(auth)
-        if not dlg.exec_() or not dlg.user:
-            code = 0
-            break
-        user, session_token = dlg.user, dlg.session_token
+        last_code = app.exec_()
 
-    # Beim Beenden: Session revoken
+        if last_code != 42:
+            break
+
+        # Benutzerwechsel wurde innerhalb von MainWindow._do_logout()
+        # vorbereitet: neue Credentials stehen in _pending_user/_pending_token.
+        new_user = getattr(w, "_pending_user", None)
+        new_token = getattr(w, "_pending_token", None)
+
+        # Altes Fenster sauber abbauen
+        try:
+            w.hide()
+            w.close()
+            w.deleteLater()
+        except Exception:
+            logging.exception("Altes MainWindow konnte nicht abgebaut werden.")
+
+        if not new_user:
+            # Abbruch der Neuanmeldung → Programm beenden
+            last_code = 0
+            break
+
+        user, session_token = new_user, new_token
+        # Neue Iteration baut ein frisches MainWindow mit dem neuen Benutzer
+
+    # Beim Beenden: aktuelle Session revoken
     try:
         auth.logout(session_token)
     except Exception:
         pass
     db.close()
-    sys.exit(code)
+    sys.exit(last_code)
 
 
 if __name__ == "__main__":

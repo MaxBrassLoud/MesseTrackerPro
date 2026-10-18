@@ -1,8 +1,11 @@
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-                             QFileDialog, QMessageBox, QComboBox, QGroupBox,
-                             QTableWidget, QTableWidgetItem, QDialog, QFormLayout,
-                             QLineEdit, QColorDialog, QDialogButtonBox, QCheckBox,
-                             QSpinBox, QApplication)
+# ui/pages/settings.py
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFileDialog, QMessageBox, QComboBox, QGroupBox,
+    QTableWidget, QTableWidgetItem, QDialog, QFormLayout,
+    QLineEdit, QColorDialog, QDialogButtonBox, QCheckBox,
+    QSpinBox, QApplication,
+)
 from PyQt5.QtGui import QColor
 
 from core.backup import (
@@ -10,7 +13,10 @@ from core.backup import (
     validate_backup_for_restore, stage_restore,
 )
 from ui.themes import THEMES
-from config import WEB_PORT
+from config import (
+    WEB_PORT, DEFAULT_AUTO_LOGOUT_MINUTES,
+    AUTO_LOGOUT_MIN, AUTO_LOGOUT_MAX,
+)
 from core.net import local_ip
 import os
 import subprocess
@@ -81,7 +87,7 @@ class SettingsPage(QWidget):
         t.setObjectName("Title")
         v.addWidget(t)
 
-        # Theme
+        # ---- Theme ----
         theme_box = QGroupBox("Design / Theme")
         tv = QVBoxLayout(theme_box)
         row = QHBoxLayout()
@@ -97,7 +103,32 @@ class SettingsPage(QWidget):
             "Das Theme wirkt sofort auf Desktop und Smartphone-Webseite."))
         v.addWidget(theme_box)
 
-        # Statuses
+        # ---- Sicherheit / Sitzung ----
+        sec_box = QGroupBox("Sicherheit / Sitzung")
+        sec_v = QVBoxLayout(sec_box)
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Automatische Abmeldung nach Inaktivität:"))
+        self.auto_logout_spin = QSpinBox()
+        self.auto_logout_spin.setRange(AUTO_LOGOUT_MIN, AUTO_LOGOUT_MAX)
+        self.auto_logout_spin.setSuffix(" Minuten")
+        self.auto_logout_spin.setSpecialValueText("Deaktiviert")
+        self.auto_logout_spin.setValue(DEFAULT_AUTO_LOGOUT_MINUTES)
+        row2.addWidget(self.auto_logout_spin)
+        row2.addStretch(1)
+        save_btn = QPushButton("Speichern")
+        save_btn.clicked.connect(self._save_auto_logout)
+        row2.addWidget(save_btn)
+        sec_v.addLayout(row2)
+        hint_sec = QLabel(
+            "Nach dieser Zeit ohne Maus-, Tastatur- oder Scroll-Aktivität "
+            "wird die Sitzung automatisch gesperrt (Blur) und eine erneute "
+            "Anmeldung verlangt. Wert 0 deaktiviert die Funktion.")
+        hint_sec.setWordWrap(True)
+        hint_sec.setObjectName("Sub")
+        sec_v.addWidget(hint_sec)
+        v.addWidget(sec_box)
+
+        # ---- Status ----
         status_box = QGroupBox("Kundenstatus bearbeiten")
         sv = QVBoxLayout(status_box)
         self.status_table = QTableWidget(0, 5)
@@ -130,7 +161,7 @@ class SettingsPage(QWidget):
             "Löschen ist nur möglich, wenn kein Kontakt den Status verwendet."))
         v.addWidget(status_box)
 
-        # Server
+        # ---- Server ----
         server_box = QGroupBox("Lokaler Webserver")
         svv = QVBoxLayout(server_box)
         self.server_label = QLabel("")
@@ -138,7 +169,7 @@ class SettingsPage(QWidget):
         svv.addWidget(self.server_label)
         v.addWidget(server_box)
 
-        # Backup
+        # ---- Backup ----
         backup_box = QGroupBox("Datensicherung")
         bv = QVBoxLayout(backup_box)
         b1 = QPushButton("Datenbank-Backup erstellen")
@@ -162,6 +193,18 @@ class SettingsPage(QWidget):
         if idx >= 0:
             self.theme_combo.setCurrentIndex(idx)
         self.server_label.setText(f"http://{local_ip()}:{WEB_PORT}")
+
+        try:
+            cur_auto = int(self.ctx.db.get_setting(
+                "auto_logout_minutes", str(DEFAULT_AUTO_LOGOUT_MINUTES)))
+        except (ValueError, TypeError):
+            cur_auto = DEFAULT_AUTO_LOGOUT_MINUTES
+        if cur_auto < AUTO_LOGOUT_MIN:
+            cur_auto = AUTO_LOGOUT_MIN
+        if cur_auto > AUTO_LOGOUT_MAX:
+            cur_auto = AUTO_LOGOUT_MAX
+        self.auto_logout_spin.setValue(cur_auto)
+
         self._load_statuses()
 
     def _load_statuses(self):
@@ -177,8 +220,8 @@ class SettingsPage(QWidget):
                 QColor("#000") if c.lightness() > 128 else QColor("#fff"))
             self.status_table.setItem(r, 2, color_item)
             self.status_table.setItem(r, 3, QTableWidgetItem(str(s["sort_order"])))
-            self.status_table.setItem(r, 4, QTableWidgetItem(
-                "Ja" if s["active"] else "Nein"))
+            self.status_table.setItem(
+                r, 4, QTableWidgetItem("Ja" if s["active"] else "Nein"))
 
     def apply_theme(self):
         name = self.theme_combo.currentText()
@@ -188,6 +231,21 @@ class SettingsPage(QWidget):
             self, "Theme",
             f"Theme „{name}“ angewendet. Das Web-Theme wird mit dem nächsten "
             "Seitenaufruf aktiv.")
+
+    def _save_auto_logout(self):
+        val = self.auto_logout_spin.value()
+        self.ctx.db.set_setting("auto_logout_minutes", str(val))
+        if val == 0:
+            QMessageBox.information(
+                self, "Sicherheit",
+                "Automatische Abmeldung deaktiviert. Die Änderung wirkt "
+                "sofort.")
+        else:
+            QMessageBox.information(
+                self, "Sicherheit",
+                f"Automatische Abmeldung nach {val} Minuten Inaktivität "
+                f"aktiv. Die Änderung wirkt sofort (auch für die laufende "
+                f"Sitzung).")
 
     # ---- Status CRUD ----
     def _selected_status(self):
@@ -253,9 +311,10 @@ class SettingsPage(QWidget):
         if in_use > 0:
             if QMessageBox.question(
                     self, "Wird verwendet",
-                    f"Status „{s['name']}“ wird von {in_use} Kontakt(en) verwendet.\n\n"
-                    "Statt zu löschen jetzt deaktivieren? (Ausblenden aus Dropdowns, "
-                    "bestehende Kontakte behalten den Status.)",
+                    f"Status „{s['name']}“ wird von {in_use} Kontakt(en) "
+                    f"verwendet.\n\n"
+                    "Statt zu löschen jetzt deaktivieren? (Ausblenden aus "
+                    "Dropdowns, bestehende Kontakte behalten den Status.)",
                     QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
                 self.ctx.db.update_status(s["id"], active=0)
                 self._load_statuses()
@@ -294,14 +353,13 @@ class SettingsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
-    # ---- Restore (FIX #1: Staged + Restart) ----
+    # ---- Restore (staged + Restart) ----
     def restore(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Backup wählen", "", "ZIP (*.zip)")
         if not path:
             return
 
-        # 1. Vorab-Validierung (keine DB wird geöffnet)
         try:
             meta = validate_backup_for_restore(path)
         except Exception as e:
@@ -310,7 +368,6 @@ class SettingsPage(QWidget):
                 f"Das Backup konnte nicht validiert werden:\n\n{e}")
             return
 
-        # 2. Bestätigung
         if QMessageBox.question(
                 self, "Wiederherstellung vorbereiten",
                 f"Backup vom {meta.get('created_at', '?')} "
@@ -320,7 +377,6 @@ class SettingsPage(QWidget):
                 QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
 
-        # 3. ZIP staged ablegen
         try:
             stage_restore(path)
         except Exception as e:
@@ -329,7 +385,6 @@ class SettingsPage(QWidget):
                 f"Restore konnte nicht vorbereitet werden:\n\n{e}")
             return
 
-        # 4. Beenden – Restore passiert beim nächsten Start
         QMessageBox.information(
             self, "Vorbereitet",
             "Die Wiederherstellung wird beim nächsten Start durchgeführt.\n\n"

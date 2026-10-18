@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -202,6 +202,7 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL COLLATE NOCASE UNIQUE,
     website TEXT,
     phone TEXT,
+    address TEXT,                -- NEU v8: Firmenadresse (einzeilig)
     notes TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

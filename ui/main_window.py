@@ -1,8 +1,15 @@
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-                             QPushButton, QStackedWidget, QLabel, QButtonGroup,
-                             QMessageBox, QApplication)
+# ui/main_window.py
+from datetime import datetime
+
+from PyQt5.QtCore import QEvent, QTimer, Qt
+from PyQt5.QtWidgets import (
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
+    QStackedWidget, QLabel, QButtonGroup, QMessageBox, QApplication,
+    QGraphicsBlurEffect,
+)
 import logging
 
+from config import DEFAULT_AUTO_LOGOUT_MINUTES
 from ui.themes import get_theme, build_qss
 from ui.pages.home import HomePage
 from ui.pages.fairs import FairsPage
@@ -13,7 +20,7 @@ from ui.pages.merch import MerchPage
 from ui.pages.reports import ReportsPage
 from ui.pages.settings import SettingsPage
 from ui.pages.users import UsersPage
-from core.permissions import Perm, PermissionDenied
+from core.permissions import Perm
 
 
 class AppContext:
@@ -40,6 +47,14 @@ class MainWindow(QMainWindow):
         self.auth = auth
         self.user = user
         self.session_token = session_token
+
+        # Attribute für Benutzerwechsel (werden von _do_logout gefüllt)
+        self._pending_user = None
+        self._pending_token = None
+
+        # Full-Page-Kundenakte (lazy angelegt)
+        self._profile_page = None
+
         self.setWindowTitle(
             f"Messe Tracker Pro – "
             f"{user.get('display_name') or user['username']}")
@@ -51,11 +66,11 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # ---- Sidebar ----
-        sidebar = QWidget()
-        sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(220)
-        sb = QVBoxLayout(sidebar)
+        # ---- Sidebar (Referenz behalten, damit sie ausgeblendet werden kann) ----
+        self.sidebar = QWidget()
+        self.sidebar.setObjectName("Sidebar")
+        self.sidebar.setFixedWidth(220)
+        sb = QVBoxLayout(self.sidebar)
         sb.setContentsMargins(0, 0, 0, 0)
 
         title = QLabel("Messe\nTracker Pro")
@@ -122,7 +137,6 @@ class MainWindow(QMainWindow):
         info.setWordWrap(True)
         sb.addWidget(info)
 
-        # Passwort ändern, wenn must_change oder freiwillig
         from ui.dialogs.password_change import ChangePasswordDialog
         if user.get("must_change_password"):
             b_pw = QPushButton("Passwort jetzt ändern")
@@ -132,10 +146,10 @@ class MainWindow(QMainWindow):
 
         b_logout = QPushButton("Abmelden")
         b_logout.setObjectName("Ghost")
-        b_logout.clicked.connect(self._logout)
+        b_logout.clicked.connect(lambda: self._do_logout(auto=False))
         sb.addWidget(b_logout)
 
-        layout.addWidget(sidebar)
+        layout.addWidget(self.sidebar)
         layout.addWidget(self.stack, 1)
 
         # Erste Seite auswählen
@@ -144,6 +158,133 @@ class MainWindow(QMainWindow):
             self.group.buttons()[0].setChecked(True)
             self.show_page(first)
 
+        # ---- Blur-Effekt für Logout ----
+        self._blur_effect = QGraphicsBlurEffect()
+        self._blur_effect.setBlurRadius(0)
+        self._blur_effect.setEnabled(False)
+        root.setGraphicsEffect(self._blur_effect)
+
+        # ---- Idle-Detection ----
+        self._last_activity = datetime.now()
+        self._last_timeout_min = DEFAULT_AUTO_LOGOUT_MINUTES
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setInterval(5000)  # alle 5 Sekunden prüfen
+        self._idle_timer.timeout.connect(self._check_idle)
+        self._idle_timer.start()
+        QApplication.instance().installEventFilter(self)
+
+    # ------------------------------------------------------------------
+    # Idle / Auto-Logout
+    # ------------------------------------------------------------------
+    def eventFilter(self, obj, event):
+        if event.type() in (
+            QEvent.MouseMove, QEvent.MouseButtonPress,
+            QEvent.MouseButtonDblClick, QEvent.KeyPress, QEvent.Wheel,
+        ):
+            self._last_activity = datetime.now()
+        return super().eventFilter(obj, event)
+
+    def _check_idle(self):
+        try:
+            timeout_min = int(self.ctx.db.get_setting(
+                "auto_logout_minutes",
+                str(DEFAULT_AUTO_LOGOUT_MINUTES)))
+        except (ValueError, TypeError):
+            timeout_min = DEFAULT_AUTO_LOGOUT_MINUTES
+        if timeout_min <= 0:
+            return
+        idle_sec = (datetime.now() - self._last_activity).total_seconds()
+        if idle_sec >= timeout_min * 60:
+            self._last_timeout_min = timeout_min
+            self._do_logout(auto=True)
+
+    def _do_logout(self, auto=False):
+        if not auto:
+            if QMessageBox.question(
+                    self, "Abmelden",
+                    "Möchten Sie sich abmelden und zur Mitarbeiterauswahl "
+                    "zurückkehren?",
+                    QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+                return
+
+        # 1. Idle-Timer stoppen (sonst feuert er während des Logins erneut)
+        self._idle_timer.stop()
+
+        # 2. Session invalidieren
+        try:
+            self.auth.logout(self.session_token)
+        except Exception:
+            logging.exception("Logout der Session fehlgeschlagen.")
+
+        # 3. Blur einschalten: der eingefrorene Screen bleibt sichtbar,
+        #    ist aber nicht mehr interaktiv – der Login-Dialog erscheint
+        #    als separates Top-Level-Fenster ungeblurrt darüber.
+        self._blur_effect.setEnabled(True)
+        self._blur_effect.setBlurRadius(28)
+
+        if auto:
+            QMessageBox.information(
+                self, "Automatische Abmeldung",
+                f"Sie wurden nach {self._last_timeout_min} Minuten "
+                f"Inaktivität abgemeldet.\n\n"
+                f"Bitte melden Sie sich neu an, um fortzufahren.")
+
+        # 4. Login-Dialog über dem geblurrten Fenster
+        from ui.login_dialog import LoginDialog
+        dlg = LoginDialog(self.auth, self)
+        if not dlg.exec_() or not dlg.user:
+            # Abbrechen → App beenden
+            QApplication.quit()
+            return
+
+        new_user = dlg.user
+        new_token = dlg.session_token
+
+        # 5. Bei Benutzerwechsel: Window-Rebuild über main.py-Loop
+        same_user = (
+            new_user["id"] == self.user["id"]
+            and bool(new_user.get("is_admin")) == bool(self.user.get("is_admin"))
+        )
+        if not same_user:
+            self._pending_user = new_user
+            self._pending_token = new_token
+            QApplication.exit(42)
+            return
+
+        # 6. Gleicher Benutzer → Blur entfernen, Timer neu starten
+        self.user = new_user
+        self.session_token = new_token
+        self.setWindowTitle(
+            f"Messe Tracker Pro – "
+            f"{new_user.get('display_name') or new_user['username']}")
+        self._blur_effect.setBlurRadius(0)
+        self._blur_effect.setEnabled(False)
+        self._last_activity = datetime.now()
+        self._idle_timer.start()
+
+    # ------------------------------------------------------------------
+    # Full-Page Kundenakte
+    # ------------------------------------------------------------------
+    def open_contact_profile(self, contact):
+        """Öffnet die Kundenakte vollflächig, blendet die Sidebar aus."""
+        if self._profile_page is None:
+            from ui.pages.contact_profile import ContactProfilePage
+            self._profile_page = ContactProfilePage(
+                self.ctx, self, self.pages["contacts"])
+            self.stack.addWidget(self._profile_page)
+        self._profile_page.set_contact(contact)
+        self.sidebar.setVisible(False)
+        self.stack.setCurrentWidget(self._profile_page)
+
+    def close_contact_profile(self):
+        """Kehrt aus der Kundenakte zur Kundenkartei zurück."""
+        self.sidebar.setVisible(True)
+        self._profile_page.current_contact = None
+        self.show_page("contacts")
+
+    # ------------------------------------------------------------------
+    # Theme / Seiten
+    # ------------------------------------------------------------------
     def apply_theme(self):
         theme_name = self.ctx.db.get_setting("theme", "Flipper")
         self.current_theme = get_theme(theme_name)
@@ -153,6 +294,9 @@ class MainWindow(QMainWindow):
         page = self.pages.get(key)
         if not page:
             return
+        # Wenn wir zu einer normalen Seite wechseln, Sidebar sicherstellen
+        if not self.sidebar.isVisible():
+            self.sidebar.setVisible(True)
         self.stack.setCurrentWidget(page)
         if hasattr(page, "refresh"):
             try:
@@ -167,13 +311,10 @@ class MainWindow(QMainWindow):
             if hasattr(p, "on_context_changed"):
                 p.on_context_changed()
 
-    def _logout(self):
-        if QMessageBox.question(
-                self, "Abmelden",
-                "Möchten Sie sich abmelden und zur Mitarbeiterauswahl zurückkehren?",
-                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
-            return
+    def closeEvent(self, event):
         try:
-            self.auth.logout(self.session_token)
-        finally:
-            QApplication.exit(42)  # wird in main() als Benutzerwechsel behandelt
+            self._idle_timer.stop()
+            QApplication.instance().removeEventFilter(self)
+        except Exception:
+            pass
+        super().closeEvent(event)

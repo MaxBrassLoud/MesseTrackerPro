@@ -27,6 +27,11 @@ BACKUP_AUTO_INTERVAL_HOURS = 24     # Automatisches Backup alle X Stunden
 MAX_UPLOAD_MB = 20                  # Maximale Uploadgröße
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
+# NEU: Automatische Abmeldung nach Inaktivität
+DEFAULT_AUTO_LOGOUT_MINUTES = 5     # 0 = deaktiviert
+AUTO_LOGOUT_MIN = 0                 # Untergrenze (0 = aus)
+AUTO_LOGOUT_MAX = 240               # Obergrenze (4 Stunden)
+
 # Bildverarbeitung (Schutz vor Decompression-Bombs & Monster-Uploads)
 MAX_IMAGE_PIXELS = 50_000_000       # ~50 Megapixel
 MAX_IMAGE_DIMENSION = 2400          # Längste Kante nach Re-Encoding
