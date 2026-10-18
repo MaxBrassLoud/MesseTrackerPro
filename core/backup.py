@@ -1,5 +1,6 @@
 # core/backup.py
 import json
+import logging
 import shutil
 import sqlite3
 import zipfile
@@ -8,19 +9,28 @@ from datetime import datetime
 from pathlib import Path
 
 from config import (
-    DB_PATH, CARDS_DIR, BACKUP_DIR, BACKUP_ROTATION_COUNT,
+    DB_PATH, CARDS_DIR, BACKUP_DIR, DATA_DIR, BACKUP_ROTATION_COUNT,
     ALLOWED_IMAGE_EXTENSIONS
 )
 
 SCHEMA_VERSION = 3  # Muss mit database.schema.SCHEMA_VERSION übereinstimmen
 
+# Sicherheitslimit beim Entpacken (Defense-in-Depth gegen ZIP-Bombs)
+MAX_RESTORE_BYTES = 500 * 1024 * 1024  # 500 MB
+
+# Wenn beim Startup eine Wiederherstellung ansteht, liegt das ZIP hier.
+PENDING_RESTORE_FILE = DATA_DIR / "restore_pending.zip"
+
+
 class BackupError(Exception):
     pass
+
 
 def _validate_zip_member(name: str):
     """Verhindert Path-Traversal und absolute Pfade."""
     if name.startswith("/") or ".." in Path(name).parts:
         raise BackupError(f"Unsicherer Pfad im ZIP: {name}")
+
 
 def _validate_sqlite(db_file: Path):
     """Prüft Integrität und Schema-Version der SQLite-Datei."""
@@ -44,6 +54,7 @@ def _validate_sqlite(db_file: Path):
         conn.close()
     except sqlite3.Error as e:
         raise BackupError(f"SQLite-Datei ungültig: {e}")
+
 
 def create_backup(target_zip: str, auto_rotate: bool = False):
     """Konsistentes Backup via SQLite-Backup-API + Bilder als ZIP."""
@@ -83,6 +94,7 @@ def create_backup(target_zip: str, auto_rotate: bool = False):
 
     return target
 
+
 def _rotate_backups():
     """Löscht die ältesten automatischen Backups."""
     backups = sorted(BACKUP_DIR.glob("auto_backup_*.zip"),
@@ -93,8 +105,101 @@ def _rotate_backups():
         except OSError:
             pass
 
+
+def validate_backup_for_restore(source_zip: str) -> dict:
+    """Validiert das Backup, ohne es anzuwenden. Gibt die Meta zurück.
+
+    Raises BackupError bei jedem Problem. Wird von der UI genutzt, um
+    Fehler *vor* dem Staging anzuzeigen.
+    """
+    src = Path(source_zip)
+    if not src.exists():
+        raise FileNotFoundError(src)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        try:
+            with zipfile.ZipFile(src, "r") as z:
+                names = z.namelist()
+                if "messe_tracker.db" not in names:
+                    raise BackupError("Backup enthält keine messe_tracker.db")
+                if "meta.json" not in names:
+                    raise BackupError("Backup enthält keine meta.json")
+
+                total_size = 0
+                for info in z.infolist():
+                    _validate_zip_member(info.filename)
+                    total_size += info.file_size
+                    if total_size > MAX_RESTORE_BYTES:
+                        raise BackupError("Backup ist zu groß.")
+
+                z.extractall(tmp_path)
+        except zipfile.BadZipFile as e:
+            raise BackupError(f"Beschädigtes ZIP-Archiv: {e}")
+
+        extracted_db = tmp_path / "messe_tracker.db"
+        if not extracted_db.exists():
+            raise BackupError("Datenbank nicht im Backup gefunden.")
+
+        _validate_sqlite(extracted_db)
+
+        meta_file = tmp_path / "meta.json"
+        try:
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            if int(meta.get("schema", 0)) > SCHEMA_VERSION:
+                raise BackupError(
+                    f"Backup-Schema {meta['schema']} ist neuer als die "
+                    f"Anwendung ({SCHEMA_VERSION})."
+                )
+        except (json.JSONDecodeError, ValueError) as e:
+            raise BackupError(f"Ungültige meta.json: {e}")
+
+        return meta
+
+
+def stage_restore(source_zip: str) -> Path:
+    """Validiert das Backup und legt es als ausstehende Wiederherstellung ab.
+
+    Der eigentliche Restore passiert beim nächsten Start von `apply_pending_restore`,
+    *bevor* die Datenbank geöffnet wird.
+    """
+    validate_backup_for_restore(source_zip)
+    PENDING_RESTORE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_zip, PENDING_RESTORE_FILE)
+    return PENDING_RESTORE_FILE
+
+
+def apply_pending_restore() -> bool:
+    """Wird beim Startup *vor* dem Öffnen der DB aufgerufen.
+
+    Returns True, wenn eine Wiederherstellung durchgeführt wurde.
+    Wirft bei Fehlern eine Exception – die Datei bleibt dann liegen,
+    damit der nächste Start es erneut versuchen kann.
+    """
+    if not PENDING_RESTORE_FILE.exists():
+        return False
+
+    logging.info("Wiederherstellung ausstehend: %s", PENDING_RESTORE_FILE)
+    try:
+        restore_backup(str(PENDING_RESTORE_FILE), confirm_overwrite=True)
+    except Exception:
+        logging.exception("Wiederherstellung fehlgeschlagen – Datei bleibt für Retry liegen.")
+        raise
+
+    try:
+        PENDING_RESTORE_FILE.unlink()
+    except OSError:
+        pass
+    logging.info("Wiederherstellung erfolgreich abgeschlossen.")
+    return True
+
+
 def restore_backup(source_zip: str, confirm_overwrite: bool = False):
-    """Validiert das ZIP und stellt es atomar wieder her."""
+    """Validiert das ZIP und stellt es wieder her.
+
+    Sollte nur aufgerufen werden, wenn die DB-Verbindung geschlossen ist
+    (Startup, CLI). Von der UI nur via `stage_restore` + Neustart!
+    """
     if not confirm_overwrite:
         raise BackupError(
             "Wiederherstellung erfordert ausdrückliche Bestätigung.")
@@ -103,11 +208,16 @@ def restore_backup(source_zip: str, confirm_overwrite: bool = False):
     if not src.exists():
         raise FileNotFoundError(src)
 
-    # 1. Automatisches Backup vor der Wiederherstellung
-    auto_backup_path = BACKUP_DIR / (
-        f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-    )
-    create_backup(str(auto_backup_path))
+    # 1. Automatisches Backup vor der Wiederherstellung (nur wenn DB existiert)
+    if DB_PATH.exists():
+        try:
+            auto_backup_path = BACKUP_DIR / (
+                f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            )
+            create_backup(str(auto_backup_path))
+            logging.info("Pre-Restore-Backup: %s", auto_backup_path)
+        except Exception as e:
+            logging.warning("Pre-Restore-Backup fehlgeschlagen: %s", e)
 
     # 2. ZIP validieren und in temporäres Verzeichnis entpacken
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -124,7 +234,7 @@ def restore_backup(source_zip: str, confirm_overwrite: bool = False):
                 for info in z.infolist():
                     _validate_zip_member(info.filename)
                     total_size += info.file_size
-                    if total_size > 500 * 1024 * 1024:  # 500 MB Limit
+                    if total_size > MAX_RESTORE_BYTES:
                         raise BackupError("Backup ist zu groß.")
 
                 z.extractall(tmp_path)
@@ -138,7 +248,7 @@ def restore_backup(source_zip: str, confirm_overwrite: bool = False):
 
         _validate_sqlite(extracted_db)
 
-        # 3. Metadaten prüfen (Schema-Version)
+        # 3. Metadaten prüfen
         meta_file = tmp_path / "meta.json"
         try:
             meta = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -150,11 +260,10 @@ def restore_backup(source_zip: str, confirm_overwrite: bool = False):
         except (json.JSONDecodeError, ValueError) as e:
             raise BackupError(f"Ungültige meta.json: {e}")
 
-        # 4. Atomar ersetzen
-        #    - Datenbank: tmp -> DB_PATH
-        #    - Bilder: altes CARDS_DIR umbenennen, neues aus tmp kopieren
-        backup_db = DB_PATH.with_suffix(".restore.tmp")
-        shutil.copy2(extracted_db, backup_db)
+        # 4. Atomar ersetzen (Reihenfolge: Karten zuerst, DB zuletzt –
+        #    so bleibt der wichtigste Teil bei Teil-Fehlern intakt)
+        staging_db = DB_PATH.with_suffix(".restore.tmp")
+        shutil.copy2(extracted_db, staging_db)
 
         old_cards = None
         if CARDS_DIR.exists():
@@ -173,7 +282,12 @@ def restore_backup(source_zip: str, confirm_overwrite: bool = False):
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(p, dest)
 
-        backup_db.replace(DB_PATH)
+        try:
+            staging_db.replace(DB_PATH)
+        except Exception:
+            logging.exception("DB-Austausch fehlgeschlagen – Karten-Rollback")
+            staging_db.unlink(missing_ok=True)
+            raise
 
         if old_cards and old_cards.exists():
             shutil.rmtree(old_cards, ignore_errors=True)

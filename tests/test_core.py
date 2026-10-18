@@ -250,3 +250,53 @@ def test_validate_image_rejects_non_image():
     ok, err = _validate_image(FakeFile(buf))
     assert ok is False
     assert err
+
+# ------------------------------------------------------------------
+# NEU: CSRF-Verhalten für API-Endpoints
+# ------------------------------------------------------------------
+def test_api_does_not_require_csrf(db):
+    """API-Endpoints authentifizieren via URL-Token, nicht CSRF."""
+    from web.server import create_app
+    app = create_app(db)
+    app.config["TESTING"] = True
+    client = app.test_client()
+    # Ungültiger Token → 404, NICHT CSRF-400
+    resp = client.post("/api/invalid_token/submit", data={})
+    assert resp.status_code == 404
+    assert b"CSRF" not in resp.data
+
+
+def test_valid_token_attendance_works_without_csrf(db):
+    """Kompletter Attendance-Flow ohne CSRF-Feld / ohne Session-Cookie."""
+    from web.server import create_app
+    fid = db.create_fair("Test")
+    db.start_fair_day(fid)
+    emp_id, token = db.create_employee("Alice")
+
+    app = create_app(db)
+    app.config["TESTING"] = True
+    client = app.test_client()
+
+    resp = client.post(
+        f"/api/{token}/attendance",
+        data={"event_type": "enter"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302  # Redirect auf /scan/<token>?att_ok=enter
+    att = db.current_attendance(fid)
+    assert att.get(emp_id, {}).get("event_type") == "enter"
+
+
+def test_scan_page_has_no_csrf_field(db):
+    """Formular enthält kein CSRF-Feld mehr (Mobile-Flow ohne Cookies)."""
+    from web.server import create_app
+    fid = db.create_fair("Test")
+    db.start_fair_day(fid)
+    _emp_id, token = db.create_employee("Alice")
+
+    app = create_app(db)
+    app.config["TESTING"] = True
+    client = app.test_client()
+    resp = client.get(f"/scan/{token}")
+    assert resp.status_code == 200
+    assert b'name="csrf_token"' not in resp.data

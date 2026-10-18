@@ -65,7 +65,6 @@ class QueuePage(QWidget):
         split = QSplitter(Qt.Horizontal)
         v.addWidget(split, 1)
 
-        # ---- Linke Seite ----
         left = QWidget()
         lv = QVBoxLayout(left)
         self.list = QListWidget()
@@ -83,7 +82,6 @@ class QueuePage(QWidget):
         lv.addWidget(self.btn_raw)
         split.addWidget(left)
 
-        # ---- Rechte Seite ----
         right = QWidget()
         rv = QVBoxLayout(right)
 
@@ -148,17 +146,30 @@ class QueuePage(QWidget):
         if idx >= 0:
             self.status.setCurrentIndex(idx)
 
+    def _clear_form(self):
+        """FIX #5: Felder bei leerem Zustand leeren."""
+        for w in self.f.values():
+            w.clear()
+        self.notes.clear()
+        # Status-Dropdown auf ersten Eintrag
+        if self.status.count() > 0:
+            self.status.setCurrentIndex(0)
+
     def refresh(self):
         self._rebuild_status_combo()
         self.list.clear()
         for c in self.ctx.db.list_card_queue():
             if c["status"] == "processed":
                 continue
-            it = QListWidgetItem(
-                f"#{c['id']} · {c['status']} · {c['created_at']}")
+            # 'orphaned' Karten werden mit Hinweis angezeigt
+            label = f"#{c['id']} · {c['status']} · {c['created_at']}"
+            if c["status"] == "orphaned":
+                label = f"#{c['id']} · ⚠ verwaist · {c['created_at']}"
+            it = QListWidgetItem(label)
             it.setData(Qt.UserRole, c["id"])
             self.list.addItem(it)
         self.current_card = None
+        self.preview.setPixmap(QPixmap())
         self.preview.setText("Kein Bild")
         self.preview.setCursor(Qt.ArrowCursor)
         self.preview.setToolTip("")
@@ -166,6 +177,7 @@ class QueuePage(QWidget):
         self.btn_raw.setEnabled(False)
         self.btn_fullsize.setEnabled(False)
         self._last_ocr_result = None
+        self._clear_form()
 
     def _all_active_cards(self):
         cards = []
@@ -194,10 +206,12 @@ class QueuePage(QWidget):
                 self.preview.setToolTip(
                     "Klicken für Großansicht (Pfeiltasten zum Blättern)")
             else:
+                self.preview.setPixmap(QPixmap())
                 self.preview.setText("Bild nicht lesbar")
                 self.preview.setCursor(Qt.ArrowCursor)
                 self.preview.setToolTip("")
         else:
+            self.preview.setPixmap(QPixmap())
             self.preview.setText("Bilddatei nicht gefunden")
             self.preview.setCursor(Qt.ArrowCursor)
             self.preview.setToolTip("")
@@ -326,5 +340,12 @@ class QueuePage(QWidget):
             processing_status="ok", **vals)
         self.ctx.db.update_card_ocr(
             self.current_card["id"], status="processed")
+
+        # FIX A1: Auto-Advance
+        current_row = self.list.currentRow()
         self.refresh()
         self.main.pages["contacts"].refresh()
+
+        if self.list.count() > 0:
+            next_row = min(max(0, current_row), self.list.count() - 1)
+            self.list.setCurrentRow(next_row)

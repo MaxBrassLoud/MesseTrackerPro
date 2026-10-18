@@ -1,5 +1,4 @@
 import io
-import socket
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
@@ -9,33 +8,13 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 
 from config import WEB_PORT
+from core.net import local_ip          # FIX #10: zentral statt lokale Kopie
 
 try:
     import qrcode
     _QR = True
 except Exception:
     _QR = False
-
-
-def local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-        finally:
-            s.close()
-        if ip and not ip.startswith("127."):
-            return ip
-    except Exception:
-        pass
-    try:
-        ip = socket.gethostbyname(socket.gethostname())
-        if ip and not ip.startswith("127."):
-            return ip
-    except Exception:
-        pass
-    return "127.0.0.1"
 
 
 def _fmt_dt(iso):
@@ -167,7 +146,6 @@ class EmployeesPage(QWidget):
         self.btn_toggle.clicked.connect(self.toggle_active)
         act.addWidget(self.btn_toggle)
 
-        # NEU: Token-Regenerierung
         self.btn_regen = QPushButton("Token erneuern")
         self.btn_regen.setObjectName("Ghost")
         self.btn_regen.setToolTip(

@@ -2,6 +2,7 @@ import sqlite3
 import threading
 import uuid
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime
 
 from database.schema import SCHEMA_SQL, SCHEMA_VERSION
@@ -14,21 +15,25 @@ def now_iso() -> str:
 class Database:
     def __init__(self, path: str):
         self._lock = threading.RLock()
-        # check_same_thread=False + RLock: eine Verbindung, mehrere Threads.
-        # timeout=30: SQLite wartet bei Lock-Konflikten bis zu 30 s,
-        # statt sofort mit "database is locked" abzubrechen.
         self.conn = sqlite3.connect(
             path, check_same_thread=False, timeout=30
         )
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys=ON")
-        # NEU: WAL-Modus erlaubt parallele Leser während eines Schreibers
-        # und reduziert Lock-Konflikte zwischen Desktop und Webserver.
         self.conn.execute("PRAGMA journal_mode=WAL")
-        # NORMAL ist mit WAL sicher und schneller als FULL.
         self.conn.execute("PRAGMA synchronous=NORMAL")
-        # Busy-Timeout zusätzlich auf SQLite-Ebene (Millisekunden).
         self.conn.execute("PRAGMA busy_timeout=30000")
+
+    @contextmanager
+    def transaction(self):
+        """Explizite Transaktion. Bei Exception Rollback."""
+        with self._lock:
+            try:
+                yield self.conn
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
 
     # ---------- Setup / Migration ----------
     def init_db(self):
@@ -51,9 +56,6 @@ class Database:
             self.conn.execute(
                 "INSERT OR IGNORE INTO app_meta(key,value) "
                 "VALUES('theme','Flipper')")
-            # NEU: Persistenter Secret-Key für Flask-Sessions (CSRF-Schutz).
-            # Einmalig erzeugt, danach unverändert – so bleiben Sessions
-            # über Neustarts hinweg gültig.
             self.conn.execute(
                 "INSERT OR IGNORE INTO app_meta(key,value) "
                 "VALUES('web_secret_key', ?)",
@@ -98,7 +100,6 @@ class Database:
             self.conn.execute("PRAGMA foreign_keys=ON")
 
     def _drop_flipper_tables(self):
-        """Entfernt veraltete Flipper-Tabellen, falls vorhanden."""
         for tbl in ("flipper_assignments", "flipper_devices", "sync_log"):
             try:
                 self.conn.execute(f"DROP TABLE IF EXISTS {tbl}")
@@ -256,13 +257,18 @@ class Database:
 
     # ---------- Fair days ----------
     def start_fair_day(self, fair_id: int) -> int:
+        # FIX #6: global prüfen, damit nie zwei aktive Messetage existieren.
         with self._lock, self.conn:
             active = self.conn.execute(
-                "SELECT id FROM fair_days WHERE fair_id=? AND is_active=1",
-                (fair_id,)).fetchone()
+                "SELECT id, fair_id FROM fair_days WHERE is_active=1"
+            ).fetchone()
             if active:
+                if active["fair_id"] == fair_id:
+                    raise ValueError(
+                        "Für diese Messe läuft bereits ein aktiver Messetag.")
                 raise ValueError(
-                    "Für diese Messe läuft bereits ein aktiver Messetag.")
+                    "Für eine andere Messe läuft bereits ein aktiver Messetag. "
+                    "Bitte diesen zuerst beenden.")
             today = datetime.now().date().isoformat()
             cur = self.conn.execute(
                 "INSERT INTO fair_days(fair_id,day_date,started_at,is_active)"
@@ -323,10 +329,7 @@ class Database:
                 "SELECT * FROM employees WHERE token=?", (token,)).fetchone()
             return dict(row) if row else None
 
-    # NEU: Token-Regenerierung. Der alte Token wird sofort ungültig,
-    # d. h. bereits verteilte QR-Codes funktionieren nicht mehr.
     def regenerate_employee_token(self, emp_id: int) -> str:
-        """Erzeugt einen neuen Token und macht den alten ungültig."""
         new_token = uuid.uuid4().hex
         with self._lock, self.conn:
             cur = self.conn.execute(
@@ -354,6 +357,77 @@ class Database:
                  processing_status, external_id, ts, ts))
             return cur.lastrowid
 
+    # FIX #3: Atomare Erstellung Kontakt + Karte.
+    def create_contact_with_card(
+        self, *, fair_id, fair_day_id, employee_id, source,
+        name, company, position, phone, email, status, notes,
+        image_path, original_filename, external_id,
+    ):
+        """Erzeugt Kontakt und ordnet die zugehörige Karte atomar zu.
+
+        Idempotent über external_id: mehrfaches Senden führt nicht zu
+        Duplikaten, sondern liefert den bestehenden Kontakt zurück.
+
+        Returns (contact_id, card_dict|None, created_card:bool).
+        """
+        ts = now_iso()
+        with self._lock:
+            try:
+                existing = self.conn.execute(
+                    "SELECT id FROM contacts WHERE external_id=?",
+                    (external_id,)).fetchone()
+                if existing:
+                    card_row = self.conn.execute(
+                        "SELECT * FROM card_queue WHERE external_id=?",
+                        (external_id,)).fetchone()
+                    self.conn.rollback()
+                    return (existing["id"],
+                            dict(card_row) if card_row else None,
+                            False)
+
+                cur = self.conn.execute(
+                    """INSERT INTO contacts
+                    (fair_id,fair_day_id,employee_id,name,company,position,
+                     phone,email,status,notes,source,card_image_path,
+                     processing_status,external_id,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (fair_id, fair_day_id, employee_id, name, company, position,
+                     phone, email, status, notes, source, image_path,
+                     "ok", external_id, ts, ts))
+                contact_id = cur.lastrowid
+
+                card_row = self.conn.execute(
+                    "SELECT * FROM card_queue WHERE external_id=?",
+                    (external_id,)).fetchone()
+                if card_row:
+                    self.conn.execute(
+                        "UPDATE card_queue SET status='processed', contact_id=?, "
+                        "ocr_name=?, ocr_company=?, ocr_position=?, "
+                        "ocr_phone=?, ocr_email=? WHERE id=?",
+                        (contact_id, name, company, position, phone, email,
+                         card_row["id"]))
+                    card = dict(card_row)
+                    created = False
+                else:
+                    cur2 = self.conn.execute(
+                        """INSERT INTO card_queue
+                        (fair_id,fair_day_id,employee_id,image_path,
+                         original_filename,status,ocr_name,ocr_company,
+                         ocr_position,ocr_phone,ocr_email,contact_id,
+                         external_id,created_at)
+                        VALUES(?,?,?,?,?,'processed',?,?,?,?,?,?,?,?)""",
+                        (fair_id, fair_day_id, employee_id, image_path,
+                         original_filename, name, company, position, phone,
+                         email, contact_id, external_id, ts))
+                    card = {"id": cur2.lastrowid, "image_path": image_path}
+                    created = True
+
+                self.conn.commit()
+                return contact_id, card, created
+            except Exception:
+                self.conn.rollback()
+                raise
+
     def update_contact(self, contact_id, **fields):
         allowed = {"name", "company", "position", "phone", "email", "status",
                    "notes", "processing_status", "sync_status", "card_image_path"}
@@ -367,17 +441,14 @@ class Database:
                 (*vals, now_iso(), contact_id))
 
     def delete_contact(self, contact_id):
-        """Löscht einen Kontakt und löst Verknüpfungen in card_queue.
-
-        Setzt vor dem Löschen card_queue.contact_id auf NULL, damit
-        die Foreign-Key-Constraint nicht greift. Die Visitenkarte
-        selbst bleibt in der Warteschlange erhalten (als
-        'processed' markiert), nur die Verknüpfung zum Kontakt
-        wird gelöst.
-        """
+        """Löscht den Kontakt. Verknüpfte Karten werden als 'orphaned'
+        markiert, damit sie in der Queue sichtbar bleiben (kein stiller
+        Bild-Müll)."""
+        # FIX #7
         with self._lock, self.conn:
             self.conn.execute(
-                "UPDATE card_queue SET contact_id=NULL WHERE contact_id=?",
+                "UPDATE card_queue SET contact_id=NULL, status='orphaned' "
+                "WHERE contact_id=?",
                 (contact_id,))
             self.conn.execute("DELETE FROM contacts WHERE id=?", (contact_id,))
 

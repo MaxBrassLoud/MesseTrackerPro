@@ -20,9 +20,14 @@ PROCESSING_STATES = ["ok", "needs_review"]
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8765
 
-# NEU: Sicherheit & Backups
+# Sicherheit & Backups
 CSRF_ENABLED = True
 BACKUP_ROTATION_COUNT = 10          # Anzahl automatischer Backups
 BACKUP_AUTO_INTERVAL_HOURS = 24     # Automatisches Backup alle X Stunden
 MAX_UPLOAD_MB = 20                  # Maximale Uploadgröße
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+# Bildverarbeitung (Schutz vor Decompression-Bombs & Monster-Uploads)
+MAX_IMAGE_PIXELS = 50_000_000       # ~50 Megapixel
+MAX_IMAGE_DIMENSION = 2400          # Längste Kante nach Re-Encoding
+IMAGE_JPEG_QUALITY = 88             # JPEG-Qualität für Re-Encoding

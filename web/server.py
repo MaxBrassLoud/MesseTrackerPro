@@ -1,17 +1,24 @@
 """Lokaler Flask-Server für Smartphone-Anbindung."""
 import io
+import logging
 import threading
 import uuid
 from pathlib import Path
 
 from flask import (Flask, request, render_template_string, redirect,
                    url_for, session)
+from markupsafe import escape
 from PIL import Image
 
 from config import (
-    WEB_HOST, WEB_PORT, CARDS_DIR, ALLOWED_IMAGE_EXTENSIONS, MAX_UPLOAD_MB
+    WEB_HOST, WEB_PORT, CARDS_DIR, ALLOWED_IMAGE_EXTENSIONS, MAX_UPLOAD_MB,
+    MAX_IMAGE_PIXELS, MAX_IMAGE_DIMENSION, IMAGE_JPEG_QUALITY,
 )
 from ui.themes import get_theme, build_web_css
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+logger = logging.getLogger(__name__)
 
 
 BASE_HTML = """
@@ -92,6 +99,9 @@ BASE_HTML = """
 """
 
 
+# FIX: CSRF-Felder entfernt. Die API authentifiziert über den URL-Token,
+# CSRF ist dort redundant. Ohne Session-Cookie funktioniert der Flow
+# auch auf Mobilgeräten, die Cookies auf LAN-IPs blockieren.
 SCAN_BODY = """
 {{ msg_html|safe }}
 
@@ -104,7 +114,6 @@ SCAN_BODY = """
     </div>
     <form method="post" action="/api/{{ token }}/attendance"
           onsubmit="return showConfirm(this, 'Du möchtest den Stand jetzt verlassen?')">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="event_type" value="leave">
       <button type="submit" class="alt">Stand verlassen</button>
     </form>
@@ -115,7 +124,6 @@ SCAN_BODY = """
     </div>
     <form method="post" action="/api/{{ token }}/attendance"
           onsubmit="return showConfirm(this, 'Du möchtest den Stand jetzt betreten?')">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="event_type" value="enter">
       <button type="submit">Stand betreten</button>
     </form>
@@ -129,7 +137,6 @@ SCAN_BODY = """
     hinzufügen oder beides kombinieren.
   </p>
   <form method="post" action="/api/{{ token }}/submit" enctype="multipart/form-data">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input name="name" placeholder="Name">
     <input name="company" placeholder="Firma">
     <input name="position" placeholder="Position">
@@ -191,12 +198,6 @@ def _active_employee(db, token):
 
 
 def _validate_image(file_storage):
-    """Prüft, ob die hochgeladene Datei ein echtes Bild ist.
-
-    Nutzt PIL, um den tatsächlichen Bildinhalt zu verifizieren – nicht
-    nur die Dateiendung. Nach dem Verify wird der Stream zurückgesetzt,
-    damit die Datei anschließend regulär gespeichert werden kann.
-    """
     try:
         img = Image.open(file_storage.stream)
         img.verify()
@@ -206,22 +207,54 @@ def _validate_image(file_storage):
         return False, str(e)
 
 
-def _save_upload(file_storage, req_id: str):
-    """Speichert einen validierten Upload und gibt den Pfad zurück."""
-    ext = Path(file_storage.filename).suffix.lower()
-    target = CARDS_DIR / f"{req_id}{ext}"
-    if not target.exists():
-        file_storage.save(target)
+def _save_upload(file_storage, req_id: str) -> str:
+    target = CARDS_DIR / f"{req_id}.jpg"
+    if target.exists():
+        return str(target)
+
+    file_storage.stream.seek(0)
+    try:
+        img = Image.open(file_storage.stream)
+        img.load()
+    except Exception as e:
+        raise ValueError(f"Bild nicht lesbar: {e}")
+
+    try:
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and
+                                          "transparency" in img.info):
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.split()[-1])
+            img = bg
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+
+        if max(img.size) > MAX_IMAGE_DIMENSION:
+            img.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION),
+                          Image.Resampling.LANCZOS)
+    except Exception as e:
+        raise ValueError(f"Bildverarbeitung fehlgeschlagen: {e}")
+
+    tmp = CARDS_DIR / f".{req_id}.{uuid.uuid4().hex[:8]}.tmp"
+    try:
+        img.save(tmp, format="JPEG", quality=IMAGE_JPEG_QUALITY, optimize=True)
+        import os
+        os.replace(tmp, target)
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        raise ValueError(f"Bild konnte nicht gespeichert werden: {e}")
+
     return str(target)
 
 
 def create_app(db):
     app = Flask(__name__)
-    # Persistenter Secret-Key wird aus der DB-Meta gelesen (siehe init_db);
-    # Fallback auf os.urandom würde Sessions bei jedem Start invalidieren.
     app.secret_key = (
         db.get_setting("web_secret_key") or uuid.uuid4().hex
     )
+    logger.info("Flask secret_key-Quelle: %s",
+                "DB" if db.get_setting("web_secret_key") else "random (Fallback!)")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -235,11 +268,25 @@ def create_app(db):
 
     @app.before_request
     def csrf_protect():
-        """Prüft bei allen POSTs das CSRF-Token."""
+        """CSRF-Schutz NUR für session-basierte POSTs.
+
+        Die /api/<token>/* Routen authentifizieren sich über den
+        URL-Token selbst (128 Bit, widerrufbar, nur per QR geteilt).
+        Ein zusätzlicher Session-CSRF ist dort redundant UND bricht
+        auf Mobilgeräten, die Cookies auf LAN-IP-Adressen blockieren
+        (z. B. iOS Safari mit "Website-übergreifendes Tracking
+        verhindern").
+        """
         if request.method == "POST":
+            if request.path.startswith("/api/"):
+                return None
             token = session.get("_csrf_token")
             form_token = request.form.get("csrf_token")
             if not token or not form_token or token != form_token:
+                logger.warning(
+                    "CSRF-Fehler: path=%s session_token=%r form_token=%r",
+                    request.path, token, form_token,
+                )
                 return (
                     '<div class="err" style="margin:20px;padding:16px;'
                     'border-radius:10px;background:#a30;color:#fff;">'
@@ -261,6 +308,11 @@ def create_app(db):
 
     def _statuses():
         return [s["name"] for s in db.list_statuses(active_only=True)]
+
+    def _error_page(db, emp, token, message):
+        return _page(db, emp=emp, body=(
+            f'<div class="err">{escape(message)}</div>'
+            f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
     @app.route("/")
     def index():
@@ -308,10 +360,9 @@ def create_app(db):
 
         ad = _active_fair_day()
         if not ad:
-            return _page(db, emp=emp, body=(
-                '<div class="warn">Kein aktiver Messetag.</div>')), 400
+            return _error_page(db, emp, token,
+                               "Kein aktiver Messetag."), 400
 
-        # Felder einlesen
         name = request.form.get("name", "").strip()
         company = request.form.get("company", "").strip()
         position = request.form.get("position", "").strip()
@@ -329,71 +380,47 @@ def create_app(db):
         has_fields = any([name, company, position, phone, email, notes])
 
         if not has_photo and not has_fields:
-            return _page(db, emp=emp, body=(
-                '<div class="warn">Bitte mindestens ein Feld ausfüllen '
-                'oder ein Foto hinzufügen.</div>'
-                f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
+            return _error_page(db, emp, token,
+                               "Bitte mindestens ein Feld ausfüllen "
+                               "oder ein Foto hinzufügen.")
 
         image_path = None
         req_id = request.form.get("request_id") or uuid.uuid4().hex
         if has_photo:
-            # 1. Dateiendung prüfen
             ext = Path(file.filename).suffix.lower()
             if ext not in ALLOWED_IMAGE_EXTENSIONS:
-                return _page(db, emp=emp, body=(
-                    '<div class="err">Dateityp nicht erlaubt. Erlaubt sind: '
-                    f'{", ".join(sorted(ALLOWED_IMAGE_EXTENSIONS))}.</div>'
-                    f'<p><a href="/scan/{token}" class="link">← Zurück</a>'
-                    '</p>')), 400
-            # 2. Tatsächlichen Bildinhalt prüfen
+                return _error_page(db, emp, token,
+                                   "Dateityp nicht erlaubt. Erlaubt sind: "
+                                   f"{', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}."), 400
             ok, img_err = _validate_image(file)
             if not ok:
-                return _page(db, emp=emp, body=(
-                    '<div class="err">Die hochgeladene Datei ist kein '
-                    f'gültiges Bild ({img_err}).</div>'
-                    f'<p><a href="/scan/{token}" class="link">← Zurück</a>'
-                    '</p>')), 400
-            # 3. Speichern
+                return _error_page(db, emp, token,
+                                   f"Die hochgeladene Datei ist kein gültiges "
+                                   f"Bild ({img_err})."), 400
             try:
                 image_path = _save_upload(file, req_id)
             except Exception as e:
-                return _page(db, emp=emp, body=(
-                    f'<div class="err">Foto konnte nicht gespeichert '
-                    f'werden: {e}</div>')), 500
+                return _error_page(db, emp, token,
+                                   f"Foto konnte nicht gespeichert werden: {e}"), 500
 
-        # Fall A: Felder + Foto → Kontakt direkt anlegen mit Bild
         if has_fields and image_path:
             try:
-                contact_id = db.create_contact(
+                contact_id, card, created = db.create_contact_with_card(
                     fair_id=ad["fair_id"], source="Smartphone",
                     employee_id=emp["id"], fair_day_id=ad["id"],
                     name=name, company=company, position=position,
                     phone=phone, email=email, status=status, notes=notes,
-                    card_image_path=image_path, processing_status="ok")
+                    image_path=image_path,
+                    original_filename=file.filename,
+                    external_id=req_id)
             except Exception as e:
-                return _page(db, emp=emp, body=(
-                    f'<div class="err">Speichern fehlgeschlagen: {e}</div>')), 500
-
-            try:
-                card, created = db.enqueue_card(
-                    fair_id=ad["fair_id"], image_path=image_path,
-                    fair_day_id=ad["id"], employee_id=emp["id"],
-                    original_filename=file.filename, external_id=req_id)
-                if created:
-                    db.update_card_ocr(
-                        card["id"], status="processed",
-                        contact_id=contact_id,
-                        ocr_name=name, ocr_company=company,
-                        ocr_position=position, ocr_phone=phone,
-                        ocr_email=email)
-            except Exception:
-                pass
+                return _error_page(db, emp, token,
+                                   f"Speichern fehlgeschlagen: {e}"), 500
 
             return _page(db, emp=emp, body=(
                 '<div class="ok">✔ Kontakt gespeichert (mit Foto).</div>'
                 f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
-        # Fall B: nur Foto → in Warteschlange für OCR
         if image_path:
             try:
                 card, created = db.enqueue_card(
@@ -401,9 +428,8 @@ def create_app(db):
                     fair_day_id=ad["id"], employee_id=emp["id"],
                     original_filename=file.filename, external_id=req_id)
             except Exception as e:
-                return _page(db, emp=emp, body=(
-                    f'<div class="err">Foto konnte nicht gespeichert '
-                    f'werden: {e}</div>')), 500
+                return _error_page(db, emp, token,
+                                   f"Foto konnte nicht gespeichert werden: {e}"), 500
 
             if created:
                 msg = (f'✔ Visitenkarte in Warteschlange '
@@ -415,16 +441,16 @@ def create_app(db):
                 f'<div class="ok">{msg}</div>'
                 f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
-        # Fall C: nur Felder → Kontakt ohne Bild
         try:
             db.create_contact(
                 fair_id=ad["fair_id"], source="Smartphone",
                 employee_id=emp["id"], fair_day_id=ad["id"],
                 name=name, company=company, position=position,
-                phone=phone, email=email, status=status, notes=notes)
+                phone=phone, email=email, status=status, notes=notes,
+                external_id=req_id)
         except Exception as e:
-            return _page(db, emp=emp, body=(
-                f'<div class="err">Speichern fehlgeschlagen: {e}</div>')), 500
+            return _error_page(db, emp, token,
+                               f"Speichern fehlgeschlagen: {e}"), 500
         return _page(db, emp=emp, body=(
             '<div class="ok">✔ Kontakt gespeichert.</div>'
             f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
@@ -437,21 +463,22 @@ def create_app(db):
 
         ad = _active_fair_day()
         if not ad:
-            return _page(db, emp=emp, body=(
-                '<div class="warn">Kein aktiver Messetag.</div>')), 400
+            return _error_page(db, emp, token,
+                               "Kein aktiver Messetag."), 400
 
         et = request.form.get("event_type")
         if et not in ("enter", "leave"):
-            return _page(db, emp=emp, body=(
-                '<div class="err">Ungültiger Ereignistyp.</div>')), 400
+            logger.warning("Ungültiger event_type=%r von Token %s…",
+                           et, token[:8])
+            return _error_page(db, emp, token,
+                               "Ungültiger Ereignistyp."), 400
 
         try:
             _nid, changed = db.add_attendance(
                 emp["id"], ad["fair_id"], et, "Smartphone",
                 fair_day_id=ad["id"])
         except Exception as e:
-            return _page(db, emp=emp, body=(
-                f'<div class="err">Fehler: {e}</div>')), 500
+            return _error_page(db, emp, token, f"Fehler: {e}"), 500
 
         if changed:
             return redirect(url_for("scan_page", token=token, att_ok=et))

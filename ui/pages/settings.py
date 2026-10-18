@@ -2,12 +2,16 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QFileDialog, QMessageBox, QComboBox, QGroupBox,
                              QTableWidget, QTableWidgetItem, QDialog, QFormLayout,
                              QLineEdit, QColorDialog, QDialogButtonBox, QCheckBox,
-                             QSpinBox)
+                             QSpinBox, QApplication)
 from PyQt5.QtGui import QColor
-from core.backup import create_backup, restore_backup
+
+from core.backup import (
+    create_backup, restore_backup,
+    validate_backup_for_restore, stage_restore,
+)
 from ui.themes import THEMES
 from config import WEB_PORT
-from ui.pages.employees import local_ip
+from core.net import local_ip
 import os
 import subprocess
 import sys
@@ -77,7 +81,7 @@ class SettingsPage(QWidget):
         t.setObjectName("Title")
         v.addWidget(t)
 
-        # -------- Theme --------
+        # Theme
         theme_box = QGroupBox("Design / Theme")
         tv = QVBoxLayout(theme_box)
         row = QHBoxLayout()
@@ -93,7 +97,7 @@ class SettingsPage(QWidget):
             "Das Theme wirkt sofort auf Desktop und Smartphone-Webseite."))
         v.addWidget(theme_box)
 
-        # -------- Statuses --------
+        # Statuses
         status_box = QGroupBox("Kundenstatus bearbeiten")
         sv = QVBoxLayout(status_box)
         self.status_table = QTableWidget(0, 5)
@@ -126,7 +130,7 @@ class SettingsPage(QWidget):
             "Löschen ist nur möglich, wenn kein Kontakt den Status verwendet."))
         v.addWidget(status_box)
 
-        # -------- Server --------
+        # Server
         server_box = QGroupBox("Lokaler Webserver")
         svv = QVBoxLayout(server_box)
         self.server_label = QLabel("")
@@ -134,7 +138,7 @@ class SettingsPage(QWidget):
         svv.addWidget(self.server_label)
         v.addWidget(server_box)
 
-        # -------- Backup --------
+        # Backup
         backup_box = QGroupBox("Datensicherung")
         bv = QVBoxLayout(backup_box)
         b1 = QPushButton("Datenbank-Backup erstellen")
@@ -152,7 +156,6 @@ class SettingsPage(QWidget):
 
         v.addStretch(1)
 
-    # ---- Refresh ----
     def refresh(self):
         current = self.ctx.db.get_setting("theme", "Flipper")
         idx = self.theme_combo.findText(current)
@@ -169,7 +172,6 @@ class SettingsPage(QWidget):
             self.status_table.setItem(r, 1, QTableWidgetItem(s["name"]))
             color_item = QTableWidgetItem(s["color"])
             color_item.setBackground(QColor(s["color"]))
-            # Kontrastfarbe
             c = QColor(s["color"])
             color_item.setForeground(
                 QColor("#000") if c.lightness() > 128 else QColor("#fff"))
@@ -178,7 +180,6 @@ class SettingsPage(QWidget):
             self.status_table.setItem(r, 4, QTableWidgetItem(
                 "Ja" if s["active"] else "Nein"))
 
-    # ---- Theme ----
     def apply_theme(self):
         name = self.theme_combo.currentText()
         self.ctx.db.set_setting("theme", name)
@@ -210,7 +211,6 @@ class SettingsPage(QWidget):
             self.ctx.db.create_status(
                 vals["name"], vals["color"], vals["sort_order"])
             if not vals["active"]:
-                # Nachträglich deaktivieren
                 for s in self.ctx.db.list_statuses(active_only=False):
                     if s["name"] == vals["name"]:
                         self.ctx.db.update_status(s["id"], active=0)
@@ -294,23 +294,47 @@ class SettingsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
+    # ---- Restore (FIX #1: Staged + Restart) ----
     def restore(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Backup wählen", "", "ZIP (*.zip)")
         if not path:
             return
-        if QMessageBox.question(
-                self, "Bestätigen",
-                "Aktuelle Datenbank wird überschrieben. Fortfahren?"
-                ) != QMessageBox.Yes:
-            return
+
+        # 1. Vorab-Validierung (keine DB wird geöffnet)
         try:
-            restore_backup(path, confirm_overwrite=True)
-            QMessageBox.information(
-                self, "Wiederherstellung",
-                "Backup eingespielt. Bitte Anwendung neu starten.")
+            meta = validate_backup_for_restore(path)
         except Exception as e:
-            QMessageBox.critical(self, "Fehler", str(e))
+            QMessageBox.critical(
+                self, "Ungültiges Backup",
+                f"Das Backup konnte nicht validiert werden:\n\n{e}")
+            return
+
+        # 2. Bestätigung
+        if QMessageBox.question(
+                self, "Wiederherstellung vorbereiten",
+                f"Backup vom {meta.get('created_at', '?')} "
+                f"(Schema {meta.get('schema', '?')}).\n\n"
+                f"Die Anwendung wird beendet und beim nächsten Start "
+                f"wird die Datenbank wiederhergestellt. Fortfahren?",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+
+        # 3. ZIP staged ablegen
+        try:
+            stage_restore(path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Fehler",
+                f"Restore konnte nicht vorbereitet werden:\n\n{e}")
+            return
+
+        # 4. Beenden – Restore passiert beim nächsten Start
+        QMessageBox.information(
+            self, "Vorbereitet",
+            "Die Wiederherstellung wird beim nächsten Start durchgeführt.\n\n"
+            "Die Anwendung wird jetzt beendet.")
+        QApplication.quit()
 
     def open_dir(self):
         d = os.path.abspath("data")
