@@ -4,7 +4,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QComboBox, QTableWidget, QTableWidgetItem, QMessageBox, QDialog,
     QFormLayout, QTextEdit, QDialogButtonBox, QSplitter, QFrame,
-    QSizePolicy, QHeaderView, QAbstractItemView)
+    QSizePolicy, QHeaderView, QAbstractItemView, QInputDialog, QTabWidget,
+    QListWidget, QListWidgetItem)
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 
@@ -41,6 +42,14 @@ class ContactDialog(QDialog):
                     w.setText(contact[k] or "")
             form.addRow(k.capitalize(), w)
             self.inp[k] = w
+        self.address = QLineEdit()
+        self.address.setPlaceholderText("Straße, PLZ Ort, Land")
+        if contact:
+            addresses = ctx.db.list_contact_addresses(contact["id"])
+            if addresses:
+                a = addresses[0]
+                self.address.setText(", ".join(part for part in (a.get("street"), " ".join(part for part in (a.get("postal_code"), a.get("city")) if part), a.get("country")) if part))
+        form.addRow("Adresse", self.address)
 
         statuses = [s["name"]
                     for s in ctx.db.list_statuses(active_only=True)]
@@ -66,7 +75,38 @@ class ContactDialog(QDialog):
         d = {k: (w.toPlainText() if isinstance(w, QTextEdit) else w.text())
              for k, w in self.inp.items()}
         d["status"] = self.status.currentText()
+        d["address"] = self.address.text().strip()
         return d
+
+
+class ChannelDialog(QDialog):
+    def __init__(self, parent):
+        super().__init__(parent); self.setWindowTitle("Kontaktweg hinzufügen")
+        form = QFormLayout(self)
+        self.kind = QComboBox(); self.kind.addItem("E-Mail", "email"); self.kind.addItem("Telefon", "phone"); self.kind.addItem("Webseite", "website")
+        self.value, self.label = QLineEdit(), QLineEdit()
+        self.primary = QCheckBox("Als Hauptkontaktweg verwenden")
+        form.addRow("Art", self.kind); form.addRow("Wert *", self.value); form.addRow("Bezeichnung", self.label); form.addRow(self.primary)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); form.addRow(buttons)
+
+
+class AddressDialog(QDialog):
+    def __init__(self, parent):
+        super().__init__(parent); self.setWindowTitle("Adresse hinzufügen")
+        form = QFormLayout(self); self.label, self.street, self.postal, self.city, self.country = (QLineEdit() for _ in range(5))
+        self.label.setText("Geschäftlich")
+        for name, field in (("Bezeichnung", self.label), ("Straße / Hausnummer", self.street), ("PLZ", self.postal), ("Ort", self.city), ("Land", self.country)): form.addRow(name, field)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); form.addRow(buttons)
+
+
+class FollowUpDialog(QDialog):
+    def __init__(self, parent):
+        super().__init__(parent); self.setWindowTitle("Nachfassaktion anlegen")
+        form = QFormLayout(self); self.title, self.description, self.due = QLineEdit(), QTextEdit(), QLineEdit()
+        self.due.setPlaceholderText("YYYY-MM-DD (optional)")
+        self.priority = QComboBox(); self.priority.addItem("Normal", "normal"); self.priority.addItem("Hoch", "high"); self.priority.addItem("Niedrig", "low")
+        form.addRow("Aufgabe *", self.title); form.addRow("Beschreibung", self.description); form.addRow("Fällig am", self.due); form.addRow("Priorität", self.priority)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); form.addRow(buttons)
 
 
 # ======================================================================
@@ -119,6 +159,7 @@ class ContactDetailWidget(QWidget):
             ("employee", "Mitarbeiter"),
             ("fair_day", "Messetag"),
             ("created_at", "Erfasst"),
+            ("address", "Adresse"),
         ]:
             l = QLabel("—")
             l.setWordWrap(True)
@@ -138,7 +179,20 @@ class ContactDetailWidget(QWidget):
         self.notes_view.setPlaceholderText("(keine Notizen)")
         v.addWidget(self.notes_view)
 
-        v.addStretch(1)
+        self.tabs = QTabWidget()
+        self.channels = QListWidget(); self.addresses = QListWidget(); self.company_people = QListWidget(); self.tasks = QListWidget(); self.history = QListWidget()
+        contact_tab = QWidget(); cv = QVBoxLayout(contact_tab)
+        cv.addWidget(QLabel("Weitere E-Mail-Adressen, Telefonnummern und Webseiten")); cv.addWidget(self.channels)
+        channel_actions = QHBoxLayout(); self.btn_channel = QPushButton("+ Kontaktweg"); self.btn_channel.clicked.connect(self.page.add_channel); self.btn_del_channel = QPushButton("Entfernen"); self.btn_del_channel.clicked.connect(self.page.delete_channel); channel_actions.addWidget(self.btn_channel); channel_actions.addWidget(self.btn_del_channel); cv.addLayout(channel_actions)
+        cv.addWidget(QLabel("Adressen")); cv.addWidget(self.addresses)
+        address_actions = QHBoxLayout(); self.btn_address = QPushButton("+ Adresse"); self.btn_address.clicked.connect(self.page.add_address); self.btn_del_address = QPushButton("Entfernen"); self.btn_del_address.clicked.connect(self.page.delete_address); address_actions.addWidget(self.btn_address); address_actions.addWidget(self.btn_del_address); cv.addLayout(address_actions)
+        company_tab = QWidget(); company_layout = QVBoxLayout(company_tab); company_layout.addWidget(QLabel("Weitere Ansprechpartner derselben Firma")); company_layout.addWidget(self.company_people)
+        self.btn_company_contact = QPushButton("+ Ansprechpartner für diese Firma")
+        self.btn_company_contact.clicked.connect(self.page.new_company_contact)
+        company_layout.addWidget(self.btn_company_contact)
+        activity_tab = QWidget(); activity_layout = QVBoxLayout(activity_tab); activity_layout.addWidget(QLabel("Nachfassaktionen (Doppelklick zum Erledigen)")); activity_layout.addWidget(self.tasks); activity_layout.addWidget(QLabel("Historie")); activity_layout.addWidget(self.history)
+        self.tabs.addTab(contact_tab, "Kontaktwege & Adressen"); self.tabs.addTab(company_tab, "Firma & Ansprechpartner"); self.tabs.addTab(activity_tab, "Aktivitäten")
+        v.addWidget(self.tabs, 1)
 
         # Aktions-Buttons
         btn_row = QHBoxLayout()
@@ -147,16 +201,25 @@ class ContactDetailWidget(QWidget):
         self.btn_delete = QPushButton("Löschen")
         self.btn_delete.setObjectName("Ghost")
         self.btn_delete.clicked.connect(self.page.delete)
+        self.btn_task = QPushButton("+ Nachfassaktion")
+        self.btn_task.clicked.connect(self.page.create_follow_up)
         btn_row.addWidget(self.btn_edit)
+        btn_row.addWidget(self.btn_task)
         btn_row.addWidget(self.btn_delete)
         btn_row.addStretch(1)
         v.addLayout(btn_row)
 
         self._set_buttons_enabled(False)
+        self.tasks.itemDoubleClicked.connect(self.page.toggle_task)
+        self.company_people.itemDoubleClicked.connect(self.page.open_company_contact)
 
     def _set_buttons_enabled(self, enabled):
         self.btn_edit.setEnabled(enabled)
         self.btn_delete.setEnabled(enabled)
+        self.btn_task.setEnabled(enabled)
+        self.btn_channel.setEnabled(enabled); self.btn_del_channel.setEnabled(enabled)
+        self.btn_address.setEnabled(enabled); self.btn_del_address.setEnabled(enabled)
+        self.btn_company_contact.setEnabled(enabled)
 
     def set_contact(self, contact):
         self.current_contact = contact
@@ -167,6 +230,7 @@ class ContactDetailWidget(QWidget):
             for l in self.fields.values():
                 l.setText("—")
             self.notes_view.clear()
+            for widget in (self.channels, self.addresses, self.company_people, self.tasks, self.history): widget.clear()
             self.image_label.setPixmap(QPixmap())
             self.image_label.setText("Wähle einen Kontakt aus der Tabelle")
             self.image_label.setCursor(Qt.ArrowCursor)
@@ -195,8 +259,32 @@ class ContactDetailWidget(QWidget):
             days.get(contact.get("fair_day_id"), "—"))
         self.fields["created_at"].setText(
             _fmt_dt(contact.get("created_at", "")) or "—")
+        addresses = self.ctx.db.list_contact_addresses(contact["id"])
+        if addresses:
+            a = addresses[0]
+            self.fields["address"].setText(", ".join(part for part in (a.get("street"), " ".join(part for part in (a.get("postal_code"), a.get("city")) if part), a.get("country")) if part))
+        else:
+            self.fields["address"].setText("—")
 
         self.notes_view.setPlainText(contact.get("notes") or "")
+
+        self.channels.clear()
+        for channel in self.ctx.db.list_contact_channels(contact["id"]):
+            item = QListWidgetItem(f"{'★ ' if channel['is_primary'] else ''}{channel['channel_type'].title()}: {channel['value']}" + (f" ({channel['label']})" if channel.get('label') else "")); item.setData(Qt.UserRole, channel["id"]); self.channels.addItem(item)
+        self.addresses.clear()
+        for address in addresses:
+            text = ", ".join(part for part in (address.get("street"), " ".join(part for part in (address.get("postal_code"), address.get("city")) if part), address.get("country")) if part)
+            item = QListWidgetItem(f"{'★ ' if address['is_primary'] else ''}{address.get('label') or 'Adresse'}: {text or 'Keine Angabe'}"); item.setData(Qt.UserRole, address["id"]); self.addresses.addItem(item)
+        self.company_people.clear()
+        if contact.get("company_id"):
+            for person in self.ctx.db.company_contacts(contact["company_id"]):
+                item = QListWidgetItem((person.get("name") or "Ohne Namen") + (f" – {person['position']}" if person.get("position") else "")); item.setData(Qt.UserRole, person["id"]); self.company_people.addItem(item)
+        else: self.company_people.addItem("Keine Firma zugeordnet.")
+        self.tasks.clear()
+        for task in self.ctx.db.list_tasks(contact_id=contact["id"]):
+            item = QListWidgetItem(f"{'✓' if task['status'] == 'done' else '○'} {task['title']} · {task['priority']} · {task.get('due_date') or 'ohne Termin'}"); item.setData(Qt.UserRole, task["id"]); item.setData(Qt.UserRole + 1, task["status"]); self.tasks.addItem(item)
+        self.history.clear()
+        for event in self.ctx.db.contact_history(contact["id"]): self.history.addItem(f"{_fmt_dt(event['created_at'])} · {event['event_type']}: {event.get('details') or ''}")
 
         self._load_image(contact.get("card_image_path"))
         self._set_buttons_enabled(True)
@@ -246,6 +334,20 @@ class ContactDetailWidget(QWidget):
             return
         cards = [{"id": self.current_contact["id"], "image_path": path}]
         FullSizeImageDialog(self, cards, 0).exec_()
+
+
+class ContactProfileDialog(QDialog):
+    """Vollflächige Kundenakte für konzentriertes Arbeiten."""
+    def __init__(self, page, contact):
+        super().__init__(page)
+        self.setWindowTitle("Kundenakte")
+        self.resize(1280, 820)
+        layout = QVBoxLayout(self)
+        header = QHBoxLayout(); title = QLabel("Kundenakte – vollständige Übersicht"); title.setObjectName("Title"); header.addWidget(title); header.addStretch()
+        close = QPushButton("Zurück zur Liste"); close.clicked.connect(self.accept); header.addWidget(close); layout.addLayout(header)
+        self.detail = ContactDetailWidget(page)
+        self.detail.set_contact(contact)
+        layout.addWidget(self.detail, 1)
 
 
 # ======================================================================
@@ -299,6 +401,7 @@ class ContactsPage(QWidget):
         header_t.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header_t.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
+        self.table.itemDoubleClicked.connect(self.open_full_profile)
         split.addWidget(self.table)
 
         self.detail = ContactDetailWidget(self)
@@ -374,6 +477,16 @@ class ContactsPage(QWidget):
         contact = self.ctx.db.get_contact(cid)
         self.detail.set_contact(contact)
 
+    def open_full_profile(self, _item=None):
+        cid = self._selected_contact_id()
+        contact = self.ctx.db.get_contact(cid) if cid else None
+        if not contact:
+            return
+        dialog = ContactProfileDialog(self, contact)
+        dialog.showMaximized()
+        dialog.exec_()
+        self._on_selection_changed()
+
     # ---------- Aktionen ----------
     def _selected_contact_id(self):
         row = self.table.currentRow()
@@ -384,17 +497,22 @@ class ContactsPage(QWidget):
         except (ValueError, AttributeError):
             return None
 
-    def new(self):
+    def new(self, company_name=""):
         if not self.ctx.current_fair_id:
             QMessageBox.warning(self, "Messe",
                                 "Bitte zuerst eine Messe auswählen.")
             return
         d = ContactDialog(self, ctx=self.ctx)
+        if company_name:
+            d.inp["company"].setText(company_name)
         if d.exec_():
             vals = d.values()
+            address = vals.pop("address", "")
             new_id = self.ctx.db.create_contact(
                 fair_id=self.ctx.current_fair_id, source="Manuell",
                 fair_day_id=self.ctx.current_fair_day_id, **vals)
+            if address:
+                self.ctx.db.add_contact_address(new_id, street=address)
             self.refresh()
             self._select_contact_by_id(new_id)
 
@@ -413,7 +531,10 @@ class ContactsPage(QWidget):
             return
         d = ContactDialog(self, contact=c, ctx=self.ctx)
         if d.exec_():
-            self.ctx.db.update_contact(cid, **d.values())
+            vals = d.values(); address = vals.pop("address", "")
+            self.ctx.db.update_contact(cid, **vals)
+            if address:
+                self.ctx.db.add_contact_address(cid, street=address)
             self.refresh()
             self._select_contact_by_id(cid)
 
@@ -459,3 +580,63 @@ class ContactsPage(QWidget):
             if it and it.text() == str(cid):
                 self.table.selectRow(r)
                 return
+
+    def create_follow_up(self):
+        cid = self._selected_contact_id()
+        if cid is None: return
+        dialog = FollowUpDialog(self)
+        if not dialog.exec_() or not dialog.title.text().strip(): return
+        try:
+            self.ctx.db.create_task(dialog.title.text().strip(), fair_id=self.ctx.current_fair_id, contact_id=cid,
+                                    description=dialog.description.toPlainText(), due_date=dialog.due.text().strip() or None,
+                                    priority=dialog.priority.currentData())
+            self._on_selection_changed()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Nachfassaktion", str(exc))
+
+    def new_company_contact(self):
+        cid = self._selected_contact_id()
+        contact = self.ctx.db.get_contact(cid) if cid else None
+        if not contact or not contact.get("company"):
+            QMessageBox.information(self, "Firma", "Bitte zuerst einen Kontakt mit Firma auswählen.")
+            return
+        self.new(contact["company"])
+
+    def open_company_contact(self, item):
+        contact_id = item.data(Qt.UserRole)
+        if contact_id:
+            self._select_contact_by_id(contact_id)
+
+    def add_channel(self):
+        cid = self._selected_contact_id()
+        if cid is None: return
+        dialog = ChannelDialog(self)
+        if not dialog.exec_(): return
+        try:
+            self.ctx.db.add_contact_channel(cid, dialog.kind.currentData(), dialog.value.text(), dialog.label.text(), dialog.primary.isChecked())
+            self._on_selection_changed()
+        except ValueError as exc: QMessageBox.warning(self, "Kontaktweg", str(exc))
+
+    def delete_channel(self):
+        item = self.detail.channels.currentItem()
+        if item and item.data(Qt.UserRole):
+            self.ctx.db.delete_contact_channel(item.data(Qt.UserRole)); self._on_selection_changed()
+
+    def add_address(self):
+        cid = self._selected_contact_id()
+        if cid is None: return
+        dialog = AddressDialog(self)
+        if dialog.exec_():
+            self.ctx.db.add_contact_address(cid, dialog.street.text(), dialog.postal.text(), dialog.city.text(), dialog.country.text(), dialog.label.text())
+            self._on_selection_changed()
+
+    def delete_address(self):
+        item = self.detail.addresses.currentItem()
+        if item and item.data(Qt.UserRole):
+            self.ctx.db.delete_contact_address(item.data(Qt.UserRole)); self._on_selection_changed()
+
+    def toggle_task(self, item):
+        task_id = item.data(Qt.UserRole)
+        if task_id:
+            self.ctx.db.update_task(task_id, status="open" if item.data(Qt.UserRole + 1) == "done" else "done")
+            self._on_selection_changed()

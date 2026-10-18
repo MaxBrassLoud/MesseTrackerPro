@@ -39,9 +39,11 @@ class Database:
     def init_db(self):
         with self._lock, self.conn:
             self.conn.executescript(SCHEMA_SQL)
+            self._migrate_v5()
             self._migrate_contacts_if_needed()
             self._drop_flipper_tables()
             self._seed_default_statuses()
+            self._seed_default_roles()
             row = self.conn.execute(
                 "SELECT value FROM app_meta WHERE key='schema_version'"
             ).fetchone()
@@ -60,6 +62,26 @@ class Database:
                 "INSERT OR IGNORE INTO app_meta(key,value) "
                 "VALUES('web_secret_key', ?)",
                 (uuid.uuid4().hex,))
+
+    def _migrate_v5(self):
+        """Ergänzt v5-Felder ohne bestehende Kontakte umzubauen."""
+        columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(contacts)")}
+        for name, definition in (
+            ("company_id", "INTEGER REFERENCES companies(id) ON DELETE SET NULL"),
+            ("lead_score", "INTEGER"),
+            ("lead_score_reason", "TEXT"),
+        ):
+            if name not in columns:
+                self.conn.execute(f"ALTER TABLE contacts ADD COLUMN {name} {definition}")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone)")
+        emp_columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(employees)")}
+        if "user_id" not in emp_columns:
+            self.conn.execute("ALTER TABLE employees ADD COLUMN user_id INTEGER REFERENCES users(id)")
+        self.conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_user ON employees(user_id) WHERE user_id IS NOT NULL")
+        # Bestehende Zugänge werden einmalig als Mitarbeiter sichtbar gemacht.
+        for user in self.conn.execute("SELECT id,display_name,email FROM users WHERE id NOT IN (SELECT user_id FROM employees WHERE user_id IS NOT NULL)").fetchall():
+            self.conn.execute("INSERT INTO employees(name,email,active,token,created_at,user_id) VALUES(?,?,1,?,?,?)", (user["display_name"] or f"Benutzer {user['id']}", user["email"] or "", uuid.uuid4().hex, now_iso(), user["id"]))
 
     def _migrate_contacts_if_needed(self):
         row = self.conn.execute(
@@ -305,6 +327,12 @@ class Database:
                 (name, email, phone, token, now_iso()))
             return cur.lastrowid, token
 
+    def ensure_employee_for_user(self, user_id, name, email=""):
+        with self._lock, self.conn:
+            existing = self.conn.execute("SELECT id FROM employees WHERE user_id=?", (user_id,)).fetchone()
+            if existing: return existing["id"]
+            return self.conn.execute("INSERT INTO employees(name,email,active,token,created_at,user_id) VALUES(?,?,1,?,?,?)", (name, email, uuid.uuid4().hex, now_iso(), user_id)).lastrowid
+
     def list_employees(self, active_only=False):
         q = "SELECT * FROM employees"
         if active_only:
@@ -329,6 +357,11 @@ class Database:
                 "SELECT * FROM employees WHERE token=?", (token,)).fetchone()
             return dict(row) if row else None
 
+    def get_employee_by_user_id(self, user_id):
+        with self._lock:
+            row = self.conn.execute("SELECT * FROM employees WHERE user_id=?", (user_id,)).fetchone()
+            return dict(row) if row else None
+
     def regenerate_employee_token(self, emp_id: int) -> str:
         new_token = uuid.uuid4().hex
         with self._lock, self.conn:
@@ -346,6 +379,9 @@ class Database:
                        processing_status="ok", external_id=None):
         ts = now_iso()
         with self._lock, self.conn:
+            company_id = None
+            if (company or "").strip():
+                company_id = self.upsert_company(company)
             cur = self.conn.execute(
                 """INSERT INTO contacts
                 (fair_id,fair_day_id,employee_id,name,company,position,phone,email,
@@ -355,7 +391,11 @@ class Database:
                 (fair_id, fair_day_id, employee_id, name, company, position,
                  phone, email, status, notes, source, card_image_path,
                  processing_status, external_id, ts, ts))
-            return cur.lastrowid
+            contact_id = cur.lastrowid
+            if company_id:
+                self.conn.execute("UPDATE contacts SET company_id=? WHERE id=?", (company_id, contact_id))
+            self._contact_event(contact_id, "created", "Kontakt erfasst")
+            return contact_id
 
     # FIX #3: Atomare Erstellung Kontakt + Karte.
     def create_contact_with_card(
@@ -436,9 +476,13 @@ class Database:
         if not sets:
             return
         with self._lock, self.conn:
+            if "company" in fields and (fields["company"] or "").strip():
+                company_id = self.upsert_company(fields["company"])
+                self.conn.execute("UPDATE contacts SET company_id=? WHERE id=?", (company_id, contact_id))
             self.conn.execute(
                 f"UPDATE contacts SET {sets}, updated_at=? WHERE id=?",
                 (*vals, now_iso(), contact_id))
+            self._contact_event(contact_id, "updated", ", ".join(sorted(k for k in fields if k in allowed)))
 
     def delete_contact(self, contact_id):
         """Löscht den Kontakt. Verknüpfte Karten werden als 'orphaned'
@@ -451,6 +495,168 @@ class Database:
                 "WHERE contact_id=?",
                 (contact_id,))
             self.conn.execute("DELETE FROM contacts WHERE id=?", (contact_id,))
+
+    # ---------- CRM v5 ----------
+    def _contact_event(self, contact_id, event_type, details="", actor_user_id=None):
+        self.conn.execute(
+            "INSERT INTO contact_events(contact_id,actor_user_id,event_type,details,created_at) VALUES(?,?,?,?,?)",
+            (contact_id, actor_user_id, event_type, details, now_iso()))
+
+    def contact_history(self, contact_id):
+        with self._lock:
+            return [dict(r) for r in self.conn.execute(
+                """SELECT e.*, u.username AS actor_name FROM contact_events e
+                   LEFT JOIN users u ON u.id=e.actor_user_id WHERE e.contact_id=?
+                   ORDER BY e.created_at DESC, e.id DESC""", (contact_id,)).fetchall()]
+
+    def list_contact_channels(self, contact_id):
+        with self._lock:
+            return [dict(r) for r in self.conn.execute("SELECT * FROM contact_channels WHERE contact_id=? ORDER BY channel_type, is_primary DESC, id", (contact_id,)).fetchall()]
+
+    def add_contact_channel(self, contact_id, channel_type, value, label="", is_primary=False):
+        if channel_type not in {"email", "phone", "website"} or not (value or "").strip():
+            raise ValueError("Kontaktweg und Wert erforderlich.")
+        with self._lock, self.conn:
+            if is_primary: self.conn.execute("UPDATE contact_channels SET is_primary=0 WHERE contact_id=? AND channel_type=?", (contact_id, channel_type))
+            return self.conn.execute("INSERT INTO contact_channels(contact_id,channel_type,value,label,is_primary) VALUES(?,?,?,?,?)", (contact_id, channel_type, value.strip(), label.strip(), int(is_primary))).lastrowid
+
+    def delete_contact_channel(self, channel_id):
+        with self._lock, self.conn:
+            self.conn.execute("DELETE FROM contact_channels WHERE id=?", (channel_id,))
+
+    def list_contact_addresses(self, contact_id):
+        with self._lock:
+            return [dict(r) for r in self.conn.execute("SELECT * FROM contact_addresses WHERE contact_id=? ORDER BY is_primary DESC,id", (contact_id,)).fetchall()]
+
+    def add_contact_address(self, contact_id, street="", postal_code="", city="", country="", label="Geschäftlich", is_primary=True):
+        with self._lock, self.conn:
+            if is_primary: self.conn.execute("UPDATE contact_addresses SET is_primary=0 WHERE contact_id=?", (contact_id,))
+            return self.conn.execute("INSERT INTO contact_addresses(contact_id,label,street,postal_code,city,country,is_primary) VALUES(?,?,?,?,?,?,?)", (contact_id, label, street, postal_code, city, country, int(is_primary))).lastrowid
+
+    def delete_contact_address(self, address_id):
+        with self._lock, self.conn:
+            self.conn.execute("DELETE FROM contact_addresses WHERE id=?", (address_id,))
+
+    def upsert_company(self, name, website="", phone="", notes=""):
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Firmenname erforderlich.")
+        with self._lock, self.conn:
+            row = self.conn.execute("SELECT id FROM companies WHERE name=? COLLATE NOCASE", (name,)).fetchone()
+            if row:
+                self.conn.execute("UPDATE companies SET website=COALESCE(NULLIF(?,''),website), phone=COALESCE(NULLIF(?,''),phone), notes=COALESCE(NULLIF(?,''),notes), updated_at=? WHERE id=?", (website, phone, notes, now_iso(), row["id"]))
+                return row["id"]
+            return self.conn.execute("INSERT INTO companies(name,website,phone,notes,created_at,updated_at) VALUES(?,?,?,?,?,?)", (name, website, phone, notes, now_iso(), now_iso())).lastrowid
+
+    def company_contacts(self, company_id):
+        with self._lock:
+            return [dict(r) for r in self.conn.execute("SELECT * FROM contacts WHERE company_id=? ORDER BY name, id", (company_id,)).fetchall()]
+
+    def create_task(self, title, *, fair_id=None, contact_id=None, company_id=None, description="", due_date=None, priority="normal", assigned_user_id=None):
+        if not (title or "").strip():
+            raise ValueError("Aufgabentitel erforderlich.")
+        if priority not in {"low", "normal", "high"}:
+            raise ValueError("Ungültige Priorität.")
+        with self._lock, self.conn:
+            task_id = self.conn.execute("""INSERT INTO follow_up_tasks(fair_id,contact_id,company_id,title,description,due_date,priority,assigned_user_id,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""", (fair_id, contact_id, company_id, title.strip(), description, due_date or None, priority, assigned_user_id, now_iso(), now_iso())).lastrowid
+            if contact_id:
+                self._contact_event(contact_id, "task_created", title.strip(), assigned_user_id)
+            return task_id
+
+    def list_tasks(self, fair_id=None, contact_id=None, status=None):
+        q = """SELECT t.*, c.name AS contact_name, c.company AS contact_company, u.username AS assigned_name
+               FROM follow_up_tasks t LEFT JOIN contacts c ON c.id=t.contact_id LEFT JOIN users u ON u.id=t.assigned_user_id WHERE 1=1"""
+        args = []
+        if fair_id is not None: q += " AND t.fair_id=?"; args.append(fair_id)
+        if contact_id is not None: q += " AND t.contact_id=?"; args.append(contact_id)
+        if status: q += " AND t.status=?"; args.append(status)
+        q += " ORDER BY CASE t.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END, CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, COALESCE(t.due_date,'9999-12-31'), t.id DESC"
+        with self._lock: return [dict(r) for r in self.conn.execute(q, args).fetchall()]
+
+    def update_task(self, task_id, **fields):
+        allowed = {"title", "description", "due_date", "priority", "status", "assigned_user_id"}
+        clean = {k: v for k, v in fields.items() if k in allowed}
+        if clean.get("status") not in (None, "open", "in_progress", "done"): raise ValueError("Ungültiger Status.")
+        if not clean: return
+        if clean.get("status") == "done": clean["completed_at"] = now_iso()
+        elif "status" in clean: clean["completed_at"] = None
+        sets = ", ".join(f"{k}=?" for k in clean) + ", updated_at=?"
+        with self._lock, self.conn:
+            task = self.conn.execute("SELECT contact_id,title FROM follow_up_tasks WHERE id=?", (task_id,)).fetchone()
+            self.conn.execute(f"UPDATE follow_up_tasks SET {sets} WHERE id=?", (*clean.values(), now_iso(), task_id))
+            if task and task["contact_id"] and "status" in clean:
+                self._contact_event(task["contact_id"], "task_" + clean["status"], task["title"])
+
+    def find_duplicate_candidates(self, contact_id):
+        c = self.get_contact(contact_id)
+        if not c: return []
+        def norm(value): return "".join(ch.lower() for ch in (value or "") if ch.isalnum())
+        email, phone = norm(c.get("email")), norm(c.get("phone"))
+        if not email and not phone: return []
+        candidates = []
+        for other in self.search_contacts():
+            if other["id"] == contact_id: continue
+            oe, op = norm(other.get("email")), norm(other.get("phone"))
+            reasons = []
+            if email and email == oe: reasons.append("gleiche E-Mail")
+            if phone and phone == op: reasons.append("gleiche Telefonnummer")
+            if reasons: candidates.append({"contact": other, "reasons": reasons})
+        return candidates
+
+    def merge_contacts(self, keep_id, duplicate_id, actor_user_id=None):
+        if keep_id == duplicate_id: raise ValueError("Ein Kontakt kann nicht mit sich selbst zusammengeführt werden.")
+        with self.transaction():
+            keep, duplicate = self.get_contact(keep_id), self.get_contact(duplicate_id)
+            if not keep or not duplicate: raise ValueError("Kontakt nicht gefunden.")
+            for field in ("name", "company", "position", "phone", "email", "notes", "card_image_path", "company_id", "lead_score", "lead_score_reason"):
+                if not keep.get(field) and duplicate.get(field):
+                    self.conn.execute(f"UPDATE contacts SET {field}=?, updated_at=? WHERE id=?", (duplicate[field], now_iso(), keep_id))
+            self.conn.execute("UPDATE follow_up_tasks SET contact_id=? WHERE contact_id=?", (keep_id, duplicate_id))
+            self.conn.execute("UPDATE card_queue SET contact_id=? WHERE contact_id=?", (keep_id, duplicate_id))
+            self._contact_event(keep_id, "duplicate_merged", f"Mit Kontakt #{duplicate_id} zusammengeführt", actor_user_id)
+            self.conn.execute("DELETE FROM contacts WHERE id=?", (duplicate_id,))
+
+    def score_contact(self, contact_id, manual_score=None, actor_user_id=None):
+        """Liefert eine nachvollziehbare Lead-Einstufung (0–100).
+
+        Es werden ausschließlich gespeicherte Angaben ausgewertet. Ein manuell
+        gesetzter Wert wird nicht durch die automatische Bewertung überschrieben.
+        """
+        contact = self.get_contact(contact_id)
+        if not contact:
+            raise ValueError("Kontakt nicht gefunden.")
+        if manual_score is not None:
+            if not isinstance(manual_score, int) or not 0 <= manual_score <= 100:
+                raise ValueError("Lead-Bewertung muss zwischen 0 und 100 liegen.")
+            score, reasons = manual_score, ["manuell festgelegt"]
+        else:
+            score, reasons = 0, []
+            status = (contact.get("status") or "").casefold()
+            if status in {"auftrag erteilt", "auftrag"}: score += 50; reasons.append("Auftrag dokumentiert")
+            elif status in {"anfrage", "interessiert"}: score += 25; reasons.append(f"Status: {contact.get('status')}")
+            if contact.get("notes"):
+                score += 15; reasons.append("Gesprächsnotiz vorhanden")
+            if self.conn.execute("SELECT 1 FROM follow_up_tasks WHERE contact_id=? AND status<>'done'", (contact_id,)).fetchone():
+                score += 15; reasons.append("offener nächster Schritt")
+            if contact.get("company"):
+                score += 5; reasons.append("Unternehmen angegeben")
+            score = min(score, 100)
+        with self._lock, self.conn:
+            self.conn.execute("UPDATE contacts SET lead_score=?, lead_score_reason=?, updated_at=? WHERE id=?", (score, "; ".join(reasons) or "keine ausreichenden Angaben", now_iso(), contact_id))
+            self._contact_event(contact_id, "lead_scored", f"{score}/100: {'; '.join(reasons) or 'keine ausreichenden Angaben'}", actor_user_id)
+        return {"score": score, "reasons": reasons}
+
+    def create_checklist_item(self, fair_id, title, phase="preparation", due_date=None, assigned_user_id=None):
+        if phase not in {"preparation", "during", "followup"}: raise ValueError("Ungültige Checklistenphase.")
+        with self._lock, self.conn:
+            return self.conn.execute("INSERT INTO fair_checklist_items(fair_id,phase,title,due_date,assigned_user_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (fair_id, phase, title, due_date, assigned_user_id, now_iso(), now_iso())).lastrowid
+
+    def list_checklist_items(self, fair_id):
+        with self._lock: return [dict(r) for r in self.conn.execute("SELECT * FROM fair_checklist_items WHERE fair_id=? ORDER BY done, phase, due_date, id", (fair_id,)).fetchall()]
+
+    def set_checklist_done(self, item_id, done):
+        with self._lock, self.conn: self.conn.execute("UPDATE fair_checklist_items SET done=?, updated_at=? WHERE id=?", (int(done), now_iso(), item_id))
 
     def get_contact(self, contact_id):
         with self._lock:
@@ -734,9 +940,248 @@ class Database:
             present = [eid for eid, v in att.items() if v["event_type"] == "enter"]
             absent = [eid for eid, v in att.items() if v["event_type"] == "leave"]
             merch = self.merch_summary(fair_id)
+            tasks_open = one("SELECT COUNT(*) FROM follow_up_tasks WHERE fair_id=? AND status<>'done'", fair_id)
+            tasks_overdue = one("SELECT COUNT(*) FROM follow_up_tasks WHERE fair_id=? AND status<>'done' AND due_date IS NOT NULL AND due_date<?", fair_id, datetime.now().date().isoformat())
             return {
                 "total_today": total_today, "total_fair": total_fair,
                 "companies": companies, "by_status": by_status,
                 "pending_cards": pending_cards,
                 "present": present, "absent": absent, "merch": merch,
+                "tasks_open": tasks_open, "tasks_overdue": tasks_overdue,
             }
+
+    # ================== Auth v4 ==================
+
+    def _seed_default_roles(self):
+        from core.permissions import (
+            ALL_PERMISSIONS, DEFAULT_USER_PERMISSIONS,
+            SYSTEM_ROLE_ADMIN_ID, SYSTEM_ROLE_USER_ID,
+        )
+        now = now_iso()
+        self.conn.execute(
+            "INSERT OR IGNORE INTO roles(id,name,description,is_system,created_at) "
+            "VALUES(?,?,?,1,?)",
+            (SYSTEM_ROLE_ADMIN_ID, "Administrator",
+             "Vollzugriff auf alle Funktionen", now))
+        self.conn.execute(
+            "INSERT OR IGNORE INTO roles(id,name,description,is_system,created_at) "
+            "VALUES(?,?,?,1,?)",
+            (SYSTEM_ROLE_USER_ID, "Benutzer",
+             "Standardzugriff (Lesen, Erstellen, Bearbeiten)", now))
+        for p, _ in ALL_PERMISSIONS:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO role_permissions(role_id,permission) "
+                "VALUES(?,?)", (SYSTEM_ROLE_ADMIN_ID, p))
+        for p in DEFAULT_USER_PERMISSIONS:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO role_permissions(role_id,permission) "
+                "VALUES(?,?)", (SYSTEM_ROLE_USER_ID, p))
+
+    # ---- Users ----
+    def has_any_user(self) -> bool:
+        with self._lock:
+            return self.conn.execute(
+                "SELECT 1 FROM users LIMIT 1").fetchone() is not None
+
+    def create_user(self, *, username, display_name, email, password_hash,
+                    password_salt, password_iter, must_change_password,
+                    is_admin) -> int:
+        ts = now_iso()
+        with self._lock, self.conn:
+            cur = self.conn.execute(
+                """INSERT INTO users
+                (username,display_name,email,password_hash,password_salt,
+                 password_iter,must_change_password,is_active,is_admin,
+                 created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,1,?,?,?)""",
+                (username, display_name, email, password_hash, password_salt,
+                 password_iter, int(must_change_password), int(is_admin),
+                 ts, ts))
+            return cur.lastrowid
+
+    def get_user(self, user_id):
+        with self._lock:
+            r = self.conn.execute(
+                "SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+            return dict(r) if r else None
+
+    def get_user_by_username(self, username):
+        with self._lock:
+            r = self.conn.execute(
+                "SELECT * FROM users WHERE username=?", (username,)).fetchone()
+            return dict(r) if r else None
+
+    def list_users(self):
+        with self._lock:
+            return [dict(r) for r in self.conn.execute(
+                "SELECT * FROM users ORDER BY username").fetchall()]
+
+    def update_user_password(self, user_id, pw_hash, salt, iters,
+                             must_change_password):
+        ts = now_iso()
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET password_hash=?, password_salt=?, "
+                "password_iter=?, must_change_password=?, updated_at=? "
+                "WHERE id=?",
+                (pw_hash, salt, iters, int(must_change_password), ts, user_id))
+
+    def set_user_active(self, user_id, active):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET is_active=?, updated_at=? WHERE id=?",
+                (int(active), now_iso(), user_id))
+
+    def set_user_admin(self, user_id, is_admin):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET is_admin=?, updated_at=? WHERE id=?",
+                (int(is_admin), now_iso(), user_id))
+
+    def set_user_last_login(self, user_id):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET last_login=? WHERE id=?",
+                (now_iso(), user_id))
+
+    def increment_failed_login(self, user_id):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET failed_login_count=failed_login_count+1 "
+                "WHERE id=?", (user_id,))
+
+    def get_failed_login_count(self, user_id):
+        with self._lock:
+            r = self.conn.execute(
+                "SELECT failed_login_count FROM users WHERE id=?",
+                (user_id,)).fetchone()
+            return r["failed_login_count"] if r else 0
+
+    def reset_failed_login(self, user_id):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET failed_login_count=0, locked_until=NULL "
+                "WHERE id=?", (user_id,))
+
+    def set_user_lockout(self, user_id, until_iso):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE users SET locked_until=? WHERE id=?",
+                (until_iso, user_id))
+
+    def count_active_admins(self, exclude_user_id=None) -> int:
+        q = "SELECT COUNT(*) FROM users WHERE is_admin=1 AND is_active=1"
+        args = []
+        if exclude_user_id is not None:
+            q += " AND id<>?"; args.append(exclude_user_id)
+        with self._lock:
+            return self.conn.execute(q, args).fetchone()[0]
+
+    # ---- Roles / Permissions ----
+    def set_user_role(self, user_id, role_id):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "DELETE FROM user_roles WHERE user_id=?", (user_id,))
+            self.conn.execute(
+                "INSERT INTO user_roles(user_id,role_id) VALUES(?,?)",
+                (user_id, role_id))
+
+    def set_user_roles(self, user_id, role_ids):
+        """Ersetzt die frei wählbaren Rollen eines Benutzers atomar."""
+        role_ids = {int(role_id) for role_id in role_ids}
+        with self._lock, self.conn:
+            valid = {r["id"] for r in self.conn.execute("SELECT id FROM roles WHERE id IN (%s)" % ",".join("?" * len(role_ids)), tuple(role_ids)).fetchall()} if role_ids else set()
+            if valid != role_ids: raise ValueError("Mindestens eine Rolle existiert nicht.")
+            self.conn.execute("DELETE FROM user_roles WHERE user_id=?", (user_id,))
+            self.conn.executemany("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", [(user_id, role_id) for role_id in role_ids])
+
+    def user_role_ids(self, user_id):
+        with self._lock:
+            return {r["role_id"] for r in self.conn.execute("SELECT role_id FROM user_roles WHERE user_id=?", (user_id,)).fetchall()}
+
+    def get_user_permissions(self, user_id) -> set:
+        with self._lock:
+            rows = self.conn.execute(
+                """SELECT DISTINCT rp.permission
+                   FROM user_roles ur
+                   JOIN role_permissions rp ON rp.role_id=ur.role_id
+                   WHERE ur.user_id=?""", (user_id,)).fetchall()
+            return {r["permission"] for r in rows}
+
+    def list_roles(self):
+        with self._lock:
+            return [dict(r) for r in self.conn.execute(
+                "SELECT * FROM roles ORDER BY id").fetchall()]
+
+    def get_role_permissions(self, role_id) -> set:
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT permission FROM role_permissions WHERE role_id=?",
+                (role_id,)).fetchall()
+            return {r["permission"] for r in rows}
+
+    def create_role(self, name, description="", permissions=()) -> int:
+        with self._lock, self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO roles(name,description,is_system,created_at) "
+                "VALUES(?,?,0,?)", (name, description, now_iso()))
+            rid = cur.lastrowid
+            for p in permissions:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO role_permissions(role_id,permission) "
+                    "VALUES(?,?)", (rid, p))
+            return rid
+
+    def set_role_permissions(self, role_id, permissions):
+        from core.permissions import SYSTEM_ROLE_ADMIN_ID
+        with self._lock, self.conn:
+            if role_id == SYSTEM_ROLE_ADMIN_ID:
+                raise ValueError(
+                    "Admin-Rolle darf nicht eingeschränkt werden.")
+            self.conn.execute(
+                "DELETE FROM role_permissions WHERE role_id=?", (role_id,))
+            for p in permissions:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO role_permissions(role_id,permission) "
+                    "VALUES(?,?)", (role_id, p))
+
+    # ---- Sessions ----
+    def create_session(self, user_id, token, expires_at, ip="", user_agent=""):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "INSERT INTO sessions(user_id,token,created_at,expires_at,"
+                "ip,user_agent) VALUES(?,?,?,?,?,?)",
+                (user_id, token, now_iso(), expires_at, ip, user_agent))
+
+    def get_session(self, token):
+        with self._lock:
+            r = self.conn.execute(
+                "SELECT * FROM sessions WHERE token=? AND revoked=0",
+                (token,)).fetchone()
+            return dict(r) if r else None
+
+    def revoke_session(self, token):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE sessions SET revoked=1 WHERE token=?", (token,))
+
+    def revoke_user_sessions(self, user_id):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "UPDATE sessions SET revoked=1 WHERE user_id=?", (user_id,))
+
+    # ---- Login-Attempts / Audit ----
+    def log_login_attempt(self, username, ip, success):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "INSERT INTO login_attempts(username,ip,success,timestamp) "
+                "VALUES(?,?,?,?)",
+                (username, ip, int(success), now_iso()))
+
+    def audit(self, user_id, action, target_type=None, target_id=None,
+              details=None):
+        with self._lock, self.conn:
+            self.conn.execute(
+                "INSERT INTO audit_log(timestamp,user_id,action,target_type,"
+                "target_id,details) VALUES(?,?,?,?,?,?)",
+                (now_iso(), user_id, action, target_type, target_id, details))

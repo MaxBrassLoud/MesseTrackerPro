@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt
 
 from core.export import export_contacts_csv
+from core.pdf_report import generate_fair_report
 
 
 def _parse_dt(iso):
@@ -84,6 +85,10 @@ class OverviewTab(QWidget):
         btn.clicked.connect(self.refresh)
         bar.addWidget(btn)
         v.addLayout(bar)
+        self.summary = QLabel()
+        self.summary.setWordWrap(True)
+        self.summary.setStyleSheet("padding:8px;border-left:3px solid #FF8200;")
+        v.addWidget(self.summary)
         self.canvas = MplCanvas(self, height=7)
         v.addWidget(self.canvas, 1)
 
@@ -95,6 +100,7 @@ class OverviewTab(QWidget):
         _style_figure(fig, colors)
         if not fair_id:
             self.stats.setText("Bitte zuerst eine Messe auswählen.")
+            self.summary.setText("Wählen Sie eine Messe aus. Die Auswertung zeigt anschließend ausschließlich deren gespeicherte Kontakte und Aufgaben.")
             ax = fig.add_subplot(111)
             ax.text(0.5, 0.5, "Keine Messe ausgewählt", ha='center',
                     va='center', color=colors["fg"], transform=ax.transAxes)
@@ -110,19 +116,26 @@ class OverviewTab(QWidget):
         total_blocks = sum(len(v) for v in intervals.values())
 
         self.stats.setText(
-            f"<b>{len(contacts)}</b> Kontakte · "
-            f"<b>{len(companies)}</b> Unternehmen · "
-            f"<b>{len(fair_days)}</b> Messetage · "
-            f"<b>{total_blocks}</b> Anwesenheitsblöcke")
+            f"<b>{len(contacts)}</b> erfasste Kontakte &nbsp;·&nbsp; "
+            f"<b>{len(companies)}</b> unterschiedliche Unternehmen &nbsp;·&nbsp; "
+            f"<b>{db.dashboard_stats(fair_id)['tasks_open']}</b> offene Nachfassaktionen")
+        by_day = db.contacts_by_day(fair_id)
+        busiest = max(by_day, key=lambda item: item[1]) if by_day else None
+        status_summary = db.dashboard_stats(fair_id)["by_status"]
+        strongest = max(status_summary.items(), key=lambda item: item[1]) if status_summary else None
+        self.summary.setText(
+            "<b>So lesen Sie diese Seite:</b> Die oberen Zahlen sind keine Schätzungen, sondern alle erfassten Kontakte der ausgewählten Messe. "
+            + (f"Der stärkste Erfassungstag war <b>{busiest[0]}</b> mit <b>{busiest[1]}</b> Kontakten. " if busiest else "Noch liegen keine zeitlichen Kontaktdaten vor. ")
+            + (f"Der häufigste aktuelle Status ist <b>{strongest[0]}</b> ({strongest[1]} Kontakte)." if strongest and strongest[1] else "Statusdaten liegen noch nicht vor."))
 
         ax1 = fig.add_subplot(2, 2, 1)
         ax2 = fig.add_subplot(2, 2, 2)
         ax3 = fig.add_subplot(2, 2, 3)
         ax4 = fig.add_subplot(2, 2, 4)
 
-        # 1 – Kumulierte Kontakte
+        # 1 – Gesamtentwicklung: beantwortet "Wie viel wurde insgesamt erfasst?"
         tl = db.cumulative_contacts_timeline(fair_id)
-        ax1.set_title("Kumulierte Kontakte")
+        ax1.set_title("Entwicklung: Kontakte insgesamt")
         if tl:
             xs = [_parse_dt(t) for t, _ in tl]
             ys = [n for _, n in tl]
@@ -130,14 +143,14 @@ class OverviewTab(QWidget):
             ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m.'))
             ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
             ax1.set_ylabel("Anzahl")
+            ax1.set_xlabel("Erfassungsdatum")
         else:
             ax1.text(.5, .5, "Keine Daten", ha='center', va='center',
                      color=colors["fg"], transform=ax1.transAxes)
         _style_axes(ax1, colors)
 
-        # 2 – Kontakte pro Tag
-        ax2.set_title("Kontakte pro Tag")
-        by_day = db.contacts_by_day(fair_id)
+        # 2 – Tagesleistung: zeigt Spitzen statt eines dekorativen Verlaufs
+        ax2.set_title("Kontakte je Messetag")
         if by_day:
             days = [d for d, _ in by_day]
             counts = [c for _, c in by_day]
@@ -145,39 +158,39 @@ class OverviewTab(QWidget):
             ax2.set_xticks(range(len(days)))
             ax2.set_xticklabels(days, rotation=30, ha='right')
             ax2.set_ylabel("Anzahl")
+            ax2.set_xlabel("Messetag")
+            for index, count in enumerate(counts): ax2.text(index, count, str(count), ha="center", va="bottom", color=colors["fg"], fontsize=9)
         else:
             ax2.text(.5, .5, "Keine Daten", ha='center', va='center',
                      color=colors["fg"], transform=ax2.transAxes)
         _style_axes(ax2, colors)
 
-        # 3 – Kontakte nach Stunde
-        ax3.set_title("Kontakte nach Tageszeit")
+        # 3 – beste Erfassungszeit
+        ax3.set_title("Wann wurden Kontakte erfasst?")
         by_hour = db.contacts_by_hour(fair_id)
         if by_hour:
             hours = [h for h, _ in by_hour]
             counts = [c for _, c in by_hour]
             ax3.bar(hours, counts, color=colors["accent"])
-            ax3.set_xlabel("Stunde")
+            ax3.set_xlabel("Uhrzeit")
             ax3.set_ylabel("Anzahl")
         else:
             ax3.text(.5, .5, "Keine Daten", ha='center', va='center',
                      color=colors["fg"], transform=ax3.transAxes)
         _style_axes(ax3, colors)
 
-        # 4 – Status-Verteilung
-        ax4.set_title("Status-Verteilung")
+        # 4 – horizontale Balken lassen sich bei wenigen und vielen Status klar lesen
+        ax4.set_title("Aktueller Bearbeitungsstand")
         stats = db.dashboard_stats(fair_id)
         active = {k: v for k, v in stats["by_status"].items() if v > 0}
         if active:
             status_colors = {s["name"]: s["color"]
                              for s in db.list_statuses()}
-            palette = [status_colors.get(k, colors["accent"]) for k in active]
-            wedges, texts, autotexts = ax4.pie(
-                active.values(), labels=list(active.keys()),
-                autopct='%1.0f%%', colors=palette, startangle=90)
-            for t in texts + autotexts:
-                t.set_color(colors["fg"])
-                t.set_fontsize(9)
+            names, counts = list(active.keys()), list(active.values())
+            palette = [status_colors.get(k, colors["accent"]) for k in names]
+            ax4.barh(names, counts, color=palette)
+            ax4.set_xlabel("Kontakte")
+            for index, count in enumerate(counts): ax4.text(count, index, f" {count}", va="center", color=colors["fg"], fontsize=9)
         else:
             ax4.text(.5, .5, "Keine Daten", ha='center', va='center',
                      color=colors["fg"], transform=ax4.transAxes)
@@ -194,13 +207,16 @@ class ContactsTimelineTab(QWidget):
         self.main = main
         v = QVBoxLayout(self)
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Kumulierte Kontakte pro Status"))
+        bar.addWidget(QLabel("Entwicklung nach aktuellem Kontaktstatus"))
         bar.addStretch(1)
         btn = QPushButton("Aktualisieren")
         btn.setObjectName("Ghost")
         btn.clicked.connect(self.refresh)
         bar.addWidget(btn)
         v.addLayout(bar)
+        explanation = QLabel("Jede Linie zeigt, wie viele Kontakte bis zu einem Zeitpunkt mit diesem Status erfasst wurden. So werden Unterschiede zwischen Interessenten, Anfragen und Aufträgen zeitlich sichtbar.")
+        explanation.setWordWrap(True); explanation.setObjectName("Sub")
+        v.addWidget(explanation)
         self.canvas = MplCanvas(self, height=4)
         v.addWidget(self.canvas, 2)
         v.addWidget(QLabel("Letzte 30 Kontakte (chronologisch)"))
@@ -216,7 +232,7 @@ class ContactsTimelineTab(QWidget):
         colors = _theme_colors(self.main.current_theme)
         _style_figure(fig, colors)
         ax = fig.add_subplot(111)
-        ax.set_title("Kumulierte Kontakte pro Status")
+        ax.set_title("Kontaktentwicklung nach Status")
         _style_axes(ax, colors)
 
         if not self.ctx.current_fair_id:
@@ -241,6 +257,7 @@ class ContactsTimelineTab(QWidget):
             ax.xaxis.set_major_locator(mdates.AutoDateLocator())
             fig.autofmt_xdate(rotation=25, ha='right')
             ax.set_ylabel("Kontakte (kumuliert)")
+            ax.set_xlabel("Erfassungszeitpunkt")
             ax.legend(loc="upper left", facecolor=colors["bg"],
                       edgecolor=colors["border"], labelcolor=colors["fg"],
                       fontsize=9)
@@ -599,6 +616,9 @@ class ExportTab(QWidget):
         b = QPushButton("CSV exportieren")
         b.clicked.connect(self.export)
         v.addWidget(b)
+        pdf = QPushButton("PDF-Messebericht exportieren")
+        pdf.clicked.connect(self.export_pdf)
+        v.addWidget(pdf)
         v.addStretch(1)
 
     def refresh(self):
@@ -616,6 +636,20 @@ class ExportTab(QWidget):
         n = export_contacts_csv(self.ctx.db, self.ctx.current_fair_id, path)
         QMessageBox.information(
             self, "Export", f"{n} Kontakte exportiert nach:\n{path}")
+
+    def export_pdf(self):
+        if not self.ctx.current_fair_id:
+            QMessageBox.warning(self, "Messe", "Bitte zuerst eine Messe auswählen.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "PDF-Bericht speichern", "messebericht.pdf", "PDF (*.pdf)")
+        if not path: return
+        if not path.lower().endswith(".pdf"): path += ".pdf"
+        try:
+            count = generate_fair_report(self.ctx.db, self.ctx.current_fair_id, path)
+        except Exception as exc:
+            QMessageBox.critical(self, "PDF-Export", f"Bericht konnte nicht erstellt werden:\n{exc}")
+            return
+        QMessageBox.information(self, "PDF-Export", f"PDF-Bericht mit {count} Kontaktseiten gespeichert:\n{path}")
 
 
 # ======================================================================

@@ -3,9 +3,10 @@ import io
 import logging
 import threading
 import uuid
+from datetime import timedelta
 from pathlib import Path
 
-from flask import (Flask, request, render_template_string, redirect,
+from flask import (Flask, g, request, render_template_string, redirect,
                    url_for, session)
 from markupsafe import escape
 from PIL import Image
@@ -14,6 +15,7 @@ from config import (
     WEB_HOST, WEB_PORT, CARDS_DIR, ALLOWED_IMAGE_EXTENSIONS, MAX_UPLOAD_MB,
     MAX_IMAGE_PIXELS, MAX_IMAGE_DIMENSION, IMAGE_JPEG_QUALITY,
 )
+from core.auth import AuthService, AuthError
 from ui.themes import get_theme, build_web_css
 
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
@@ -98,6 +100,48 @@ BASE_HTML = """
 </html>
 """
 
+
+# ---------- Neue Auth-Templates ----------
+
+WEB_LOGIN_BODY = """
+<div class="card">
+  <h3>🔐 Anmeldung</h3>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <form method="post"
+        action="/login{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="username" placeholder="Benutzername"
+           autocomplete="username" autofocus>
+    <input name="password" type="password" placeholder="Passwort"
+           autocomplete="current-password">
+    <button type="submit">Anmelden</button>
+  </form>
+  <p style="margin-top:14px;">
+    <a href="/" class="link">← Zurück zur Startseite</a>
+  </p>
+</div>
+"""
+
+WEB_ADMIN_BODY = """
+<div class="card">
+  <h3>👋 Willkommen, {{ username }}{% if is_admin %} (Administrator){% endif %}</h3>
+  <p>Dies ist die geschützte Weboberfläche. Die vollständige
+     Admin-Funktionalität folgt in einer späteren Phase.</p>
+</div>
+<div class="card">
+  <h3>Deine Berechtigungen</h3>
+  <ul style="margin:0 0 8px 18px;padding:0;color:var(--fg-muted);">
+    {% for p in perms %}<li><code>{{ p }}</code></li>{% endfor %}
+  </ul>
+  <form method="post" action="/logout" style="margin-top:16px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="alt">Abmelden</button>
+  </form>
+</div>
+"""
+
+
+# ---------- Bestehende Templates ----------
 
 # FIX: CSRF-Felder entfernt. Die API authentifiziert über den URL-Token,
 # CSRF ist dort redundant. Ohne Session-Cookie funktioniert der Flow
@@ -258,7 +302,13 @@ def create_app(db):
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 
+    auth = AuthService(db)
+
+    # ---------------------------------------------------------------
+    # CSRF-Helper (Jinja-Global)
+    # ---------------------------------------------------------------
     def _generate_csrf_token():
         if "_csrf_token" not in session:
             session["_csrf_token"] = uuid.uuid4().hex
@@ -266,6 +316,36 @@ def create_app(db):
 
     app.jinja_env.globals["csrf_token"] = _generate_csrf_token
 
+    # ---------------------------------------------------------------
+    # before_request #1: Auth-Gate
+    # MUSS vor csrf_protect registriert werden, damit dieser zuerst
+    # läuft und unautorisierte Zugriffe früh abweist.
+    # ---------------------------------------------------------------
+    @app.before_request
+    def _auth_gate():
+        # Token-basierte Routen (Mitarbeiter-Zugang per QR, kein Passwort)
+        if (request.path.startswith("/scan/")
+                or request.path.startswith("/api/")
+                or request.path.startswith("/static/")):
+            return None
+        # Öffentliche Seiten
+        if request.path in ("/", "/login"):
+            return None
+        # Geschützte Seiten
+        if request.path.startswith("/admin") or request.path == "/logout":
+            token = session.get("session_token")
+            user = auth.user_for_session(token)
+            if not user:
+                if request.path == "/logout":
+                    return redirect(url_for("web_login"))
+                return redirect(url_for("web_login", next=request.path))
+            g.web_user = user
+        return None
+
+    # ---------------------------------------------------------------
+    # before_request #2: CSRF-Schutz
+    # Gilt für alle POSTs außer /api/* (dort Auth über URL-Token).
+    # ---------------------------------------------------------------
     @app.before_request
     def csrf_protect():
         """CSRF-Schutz NUR für session-basierte POSTs.
@@ -297,6 +377,9 @@ def create_app(db):
                 )
         return None
 
+    # ---------------------------------------------------------------
+    # Helper
+    # ---------------------------------------------------------------
     def _active_fair_day():
         return db.get_active_fair_day()
 
@@ -314,13 +397,70 @@ def create_app(db):
             f'<div class="err">{escape(message)}</div>'
             f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
+    # ---------------------------------------------------------------
+    # Öffentliche Startseite
+    # ---------------------------------------------------------------
     @app.route("/")
     def index():
         return _page(db, body=(
             '<div class="card"><h3>Messe Tracker Pro</h3>'
             '<p>Bitte scanne den persönlichen QR-Code deines Mitarbeiters.'
-            '</p></div>'))
+            '</p>'
+            '<p style="margin-top:14px;">'
+            '<a href="/login" class="link">→ Admin-Login</a></p>'
+            '</div>'))
 
+    # ---------------------------------------------------------------
+    # Login / Logout / Admin
+    # ---------------------------------------------------------------
+    @app.route("/login", methods=["GET", "POST"])
+    def web_login():
+        error = ""
+        if request.method == "POST":
+            try:
+                user, token = auth.login(
+                    request.form.get("username", ""),
+                    request.form.get("password", ""),
+                    ip=request.remote_addr or "",
+                    user_agent=(request.headers.get("User-Agent", "") or "")[:200])
+                session.clear()
+                session["session_token"] = token
+                session.permanent = True
+
+                # Sicheres Redirect-Ziel bestimmen (keine Open Redirects)
+                nxt = request.args.get("next") or "/admin"
+                if not (nxt.startswith("/")
+                        and not nxt.startswith("//")
+                        and not nxt.startswith("/login")
+                        and not nxt.startswith("/logout")):
+                    nxt = "/admin"
+                return redirect(nxt)
+            except AuthError as e:
+                error = str(e)
+                logger.info("Web-Login fehlgeschlagen: %s", e)
+
+        return _page(db, body=render_template_string(
+            WEB_LOGIN_BODY, error=error))
+
+    @app.route("/logout", methods=["POST"])
+    def web_logout():
+        token = session.pop("session_token", None)
+        auth.logout(token)
+        session.clear()
+        return redirect(url_for("web_login"))
+
+    @app.route("/admin")
+    def admin_dashboard():
+        perms = sorted(auth.permissions_for(g.web_user))
+        return _page(db, body=render_template_string(
+            WEB_ADMIN_BODY,
+            username=g.web_user["username"],
+            is_admin=g.web_user.get("is_admin", False),
+            perms=perms))
+
+    # ---------------------------------------------------------------
+    # Mitarbeiter-Scan (Token-basiert, kein Login)
+    # ---------------------------------------------------------------
     @app.route("/scan/<token>")
     def scan_page(token):
         emp, err = _active_employee(db, token)
@@ -352,6 +492,9 @@ def create_app(db):
             since_short=since_short, msg_html=msg_html)
         return _page(db, emp=emp, fair_name=fair_name, body=body)
 
+    # ---------------------------------------------------------------
+    # API: Kontakt einreichen (Token-basiert)
+    # ---------------------------------------------------------------
     @app.route("/api/<token>/submit", methods=["POST"])
     def api_submit(token):
         emp, err = _active_employee(db, token)
@@ -455,6 +598,9 @@ def create_app(db):
             '<div class="ok">✔ Kontakt gespeichert.</div>'
             f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
+    # ---------------------------------------------------------------
+    # API: Anwesenheit (Token-basiert)
+    # ---------------------------------------------------------------
     @app.route("/api/<token>/attendance", methods=["POST"])
     def api_attendance(token):
         emp, err = _active_employee(db, token)

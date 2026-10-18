@@ -40,6 +40,8 @@ class DashboardPage(QWidget):
         grid.addWidget(stat("cards", "Offene Visitenkarten"), 1, 0)
         grid.addWidget(stat("present", "Anwesend"), 1, 1)
         grid.addWidget(stat("absent", "Abwesend"), 1, 2)
+        grid.addWidget(stat("tasks", "Offene Nachfassaktionen"), 2, 0)
+        grid.addWidget(stat("overdue", "Überfällige Aufgaben"), 2, 1)
         v.addLayout(grid)
 
         self.att_box = QGroupBox("Anwesenheit am Stand")
@@ -107,6 +109,8 @@ class DashboardPage(QWidget):
         self.labels["cards"].setText(str(s["pending_cards"]))
         self.labels["present"].setText(str(len(s["present"])))
         self.labels["absent"].setText(str(len(s["absent"])))
+        self.labels["tasks"].setText(str(s["tasks_open"]))
+        self.labels["overdue"].setText(str(s["tasks_overdue"]))
         self.status_label.setText(
             " · ".join(f"{k}: {v}" for k, v in s["by_status"].items()))
 

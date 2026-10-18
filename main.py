@@ -36,7 +36,6 @@ def _setup_logging():
 
 
 def _auto_backup(db):
-    """Erzeugt höchstens ein Auto-Backup pro Kalendertag."""
     today = datetime.now().date().isoformat()
     last = db.get_setting("last_auto_backup_date", "")
     if last == today:
@@ -56,7 +55,6 @@ def _auto_backup(db):
 def _excepthook(exc_type, exc_value, exc_tb):
     tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
     logging.error("Unbehandelte Exception:\n%s", tb_text)
-
     try:
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Critical)
@@ -77,13 +75,9 @@ def main():
     _setup_logging()
     sys.excepthook = _excepthook
 
-    # QApplication früh erstellen, damit wir bei Startup-Fehlern
-    # MessageBoxen anzeigen können.
     app = QApplication(sys.argv)
 
-    # ---------------------------------------------------------------
-    # Pending Restore MUSS vor dem Öffnen der DB laufen
-    # ---------------------------------------------------------------
+    # 1. Pending Restore vor dem Öffnen der DB
     try:
         if apply_pending_restore():
             QMessageBox.information(
@@ -97,24 +91,81 @@ def main():
             f"{e}\n\n"
             f"Die vorhandene Datenbank wurde beibehalten. Die ZIP-Datei "
             f"bleibt liegen und wird beim nächsten Start erneut versucht.")
-        # Weiter mit vorhandener DB
 
+    # 2. DB öffnen & migrieren
     db = Database(str(DB_PATH))
     db.init_db()
 
     _auto_backup(db)
 
+    # Der QR-/Upload-Webserver ist bewusst unabhängig von der Desktop-Sitzung:
+    # Mitarbeitende müssen während eines Anmelde- oder Benutzerwechsels weiter
+    # Visitenkarten und Kontakte erfassen können.
     start_server(db)
 
+    # 3. Auth-Service
+    from core.auth import AuthService, AuthError
+    auth = AuthService(db)
+
+    # 4. Setup-Wizard ODER Login
+    user = None
+    session_token = None
+    if auth.is_setup_required():
+        from ui.setup_wizard import SetupWizard
+        wiz = SetupWizard(auth)
+        if not wiz.exec_():
+            logging.info("Ersteinrichtung abgebrochen.")
+            db.close()
+            sys.exit(0)
+        try:
+            user, session_token = auth.login(
+                wiz.inp_user.text().strip(), wiz.inp_pw1.text())
+        except AuthError as e:
+            QMessageBox.critical(None, "Fehler",
+                f"Anmeldung nach Einrichtung fehlgeschlagen:\n{e}")
+            db.close()
+            sys.exit(1)
+    else:
+        from ui.login_dialog import LoginDialog
+        dlg = LoginDialog(auth)
+        if not dlg.exec_() or not dlg.user:
+            logging.info("Anmeldung abgebrochen.")
+            db.close()
+            sys.exit(0)
+        user, session_token = dlg.user, dlg.session_token
+
+    # 5. Desktop-Sitzung ist erfolgreich angemeldet.
     print("[Messe Tracker Pro]")
     print(f"  Lokaler Webserver: http://{local_ip()}:{WEB_PORT}")
     print(f"  Datenbank:         {DB_PATH}")
     print(f"  Logfile:           {LOG_PATH}")
+    print(f"  Angemeldet als:    {user['username']}"
+          f"{' (Admin)' if user.get('is_admin') else ''}")
     print()
 
-    w = MainWindow(db)
-    w.show()
-    code = app.exec_()
+    # 6. Hauptfenster; Exit-Code 42 bedeutet Abmelden, nicht Programmende.
+    while True:
+        w = MainWindow(db, auth, user, session_token)
+        w.show()
+        code = app.exec_()
+        if code != 42:
+            break
+        try:
+            auth.logout(session_token)
+        except Exception:
+            pass
+        from ui.login_dialog import LoginDialog
+        dlg = LoginDialog(auth)
+        if not dlg.exec_() or not dlg.user:
+            code = 0
+            break
+        user, session_token = dlg.user, dlg.session_token
+
+    # Beim Beenden: Session revoken
+    try:
+        auth.logout(session_token)
+    except Exception:
+        pass
     db.close()
     sys.exit(code)
 

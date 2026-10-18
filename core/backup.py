@@ -13,7 +13,7 @@ from config import (
     ALLOWED_IMAGE_EXTENSIONS
 )
 
-SCHEMA_VERSION = 3  # Muss mit database.schema.SCHEMA_VERSION übereinstimmen
+from database.schema import SCHEMA_VERSION
 
 # Sicherheitslimit beim Entpacken (Defense-in-Depth gegen ZIP-Bombs)
 MAX_RESTORE_BYTES = 500 * 1024 * 1024  # 500 MB

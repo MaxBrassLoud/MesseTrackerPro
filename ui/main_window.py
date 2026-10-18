@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                              QPushButton, QStackedWidget, QLabel, QButtonGroup,
-                             QMessageBox)
+                             QMessageBox, QApplication)
+import logging
 
 from ui.themes import get_theme, build_qss
 from ui.pages.home import HomePage
@@ -8,10 +9,11 @@ from ui.pages.fairs import FairsPage
 from ui.pages.dashboard import DashboardPage
 from ui.pages.contacts import ContactsPage
 from ui.pages.queue import QueuePage
-from ui.pages.employees import EmployeesPage
 from ui.pages.merch import MerchPage
 from ui.pages.reports import ReportsPage
 from ui.pages.settings import SettingsPage
+from ui.pages.users import UsersPage
+from core.permissions import Perm, PermissionDenied
 
 
 class AppContext:
@@ -32,12 +34,16 @@ class AppContext:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, db):
+    def __init__(self, db, auth, user, session_token=None):
         super().__init__()
-        self.setWindowTitle("Messe Tracker Pro")
-        self.resize(1280, 800)
         self.ctx = AppContext(db)
-
+        self.auth = auth
+        self.user = user
+        self.session_token = session_token
+        self.setWindowTitle(
+            f"Messe Tracker Pro – "
+            f"{user.get('display_name') or user['username']}")
+        self.resize(1280, 800)
         self.apply_theme()
 
         root = QWidget()
@@ -61,44 +67,82 @@ class MainWindow(QMainWindow):
 
         # ---- Seiten ----
         self.stack = QStackedWidget()
-        self.pages = {
-            "home": HomePage(self.ctx, self),
-            "fairs": FairsPage(self.ctx, self),
-            "dashboard": DashboardPage(self.ctx, self),
-            "contacts": ContactsPage(self.ctx, self),
-            "queue": QueuePage(self.ctx, self),
-            "employees": EmployeesPage(self.ctx, self),
-            "merch": MerchPage(self.ctx, self),
-            "reports": ReportsPage(self.ctx, self),
-            "settings": SettingsPage(self.ctx, self),
-        }
-        labels = [
-            ("home", "Start"),
-            ("fairs", "Messen"),
-            ("dashboard", "Dashboard"),
-            ("contacts", "Kundenkartei"),
-            ("queue", "Visitenkarten"),
-            ("employees", "Mitarbeiter"),
-            ("merch", "Merch"),
-            ("reports", "Auswertung & Export"),
-            ("settings", "Einstellungen"),
-        ]
+        self.pages = {}
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
-        for key, label in labels:
+
+        page_specs = [
+            ("home",      "Start",               None,
+             lambda: HomePage(self.ctx, self)),
+            ("fairs",     "Messen",              Perm.EDIT_DATA,
+             lambda: FairsPage(self.ctx, self)),
+            ("dashboard", "Dashboard",           Perm.VIEW_DATA,
+             lambda: DashboardPage(self.ctx, self)),
+            ("contacts",  "Kundenkartei",        Perm.VIEW_DATA,
+             lambda: ContactsPage(self.ctx, self)),
+            ("queue",     "Visitenkarten",       Perm.CREATE_DATA,
+             lambda: QueuePage(self.ctx, self)),
+            ("merch",     "Merch",               Perm.MANAGE_MERCH,
+             lambda: MerchPage(self.ctx, self)),
+            ("reports",   "Auswertung & Export", Perm.VIEW_DATA,
+             lambda: ReportsPage(self.ctx, self)),
+            ("users",     "Benutzer",            Perm.MANAGE_USERS,
+             lambda: UsersPage(self.ctx, self, auth, user)),
+            ("settings",  "Einstellungen",       Perm.EDIT_SETTINGS,
+             lambda: SettingsPage(self.ctx, self)),
+        ]
+
+        for key, label, perm, factory in page_specs:
+            if perm is not None and not auth.has(user, perm):
+                continue
+            try:
+                page = factory()
+            except Exception as e:
+                logging.exception("Seite %s konnte nicht geladen werden", key)
+                page = QWidget()
+                err_lbl = QLabel(f"Seite „{label}“ nicht verfügbar:\n{e}")
+                err_lbl.setStyleSheet("color:#ff6b6b;padding:20px;")
+                err_lbl.setWordWrap(True)
+                pv = QVBoxLayout(page)
+                pv.addWidget(err_lbl)
+            self.pages[key] = page
+            self.stack.addWidget(page)
             b = QPushButton(label)
             b.setCheckable(True)
             b.clicked.connect(lambda _, k=key: self.show_page(k))
             self.group.addButton(b)
             sb.addWidget(b)
-            self.stack.addWidget(self.pages[key])
+
+        # ---- Benutzerinfo + Logout ----
         sb.addStretch(1)
+        info = QLabel(
+            f"👤 {user.get('display_name') or user['username']}"
+            f"{'  (Admin)' if user.get('is_admin') else ''}")
+        info.setStyleSheet("color:#888;padding:8px 18px;font-size:9pt;")
+        info.setWordWrap(True)
+        sb.addWidget(info)
+
+        # Passwort ändern, wenn must_change oder freiwillig
+        from ui.dialogs.password_change import ChangePasswordDialog
+        if user.get("must_change_password"):
+            b_pw = QPushButton("Passwort jetzt ändern")
+            b_pw.clicked.connect(
+                lambda: ChangePasswordDialog(auth, user, self).exec_())
+            sb.addWidget(b_pw)
+
+        b_logout = QPushButton("Abmelden")
+        b_logout.setObjectName("Ghost")
+        b_logout.clicked.connect(self._logout)
+        sb.addWidget(b_logout)
 
         layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
 
-        self.group.buttons()[0].setChecked(True)
-        self.show_page("home")
+        # Erste Seite auswählen
+        first = next(iter(self.pages), None)
+        if first:
+            self.group.buttons()[0].setChecked(True)
+            self.show_page(first)
 
     def apply_theme(self):
         theme_name = self.ctx.db.get_setting("theme", "Flipper")
@@ -106,8 +150,10 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(build_qss(self.current_theme))
 
     def show_page(self, key):
-        self.stack.setCurrentWidget(self.pages[key])
-        page = self.pages[key]
+        page = self.pages.get(key)
+        if not page:
+            return
+        self.stack.setCurrentWidget(page)
         if hasattr(page, "refresh"):
             try:
                 page.refresh()
@@ -120,3 +166,14 @@ class MainWindow(QMainWindow):
         for p in self.pages.values():
             if hasattr(p, "on_context_changed"):
                 p.on_context_changed()
+
+    def _logout(self):
+        if QMessageBox.question(
+                self, "Abmelden",
+                "Möchten Sie sich abmelden und zur Mitarbeiterauswahl zurückkehren?",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        try:
+            self.auth.logout(self.session_token)
+        finally:
+            QApplication.exit(42)  # wird in main() als Benutzerwechsel behandelt
