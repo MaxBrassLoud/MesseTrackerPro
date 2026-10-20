@@ -1,5 +1,6 @@
 """Lokaler Flask-Server für Smartphone-Anbindung."""
 import io
+import json
 import logging
 import threading
 import uuid
@@ -16,6 +17,7 @@ from config import (
     MAX_IMAGE_PIXELS, MAX_IMAGE_DIMENSION, IMAGE_JPEG_QUALITY,
 )
 from core.auth import AuthService, AuthError
+from core.contact_extras import set_contact_extras
 from ui.themes import get_theme, build_web_css
 
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
@@ -96,12 +98,127 @@ BASE_HTML = """
       if (e.key === 'Escape') hideModal();
     });
   </script>
+
+  <script>
+  // ============================================================
+  // Offline-Warteschlange (localStorage) + automatischer Sync
+  // ============================================================
+  (function(){
+    const TOKEN = "{{ token or '' }}";
+    const PENDING_PREFIX = 'mt_pending_';
+    if (!TOKEN) return;
+
+    function listPending(){
+      return Object.keys(localStorage)
+        .filter(k => k.startsWith(PENDING_PREFIX))
+        .map(k => ({key:k, data:JSON.parse(localStorage.getItem(k)||'{}')}));
+    }
+
+    function updateBanner(){
+      let banner = document.getElementById('sync-banner');
+      if (!banner){
+        banner = document.createElement('div');
+        banner.id = 'sync-banner';
+        banner.style.cssText = 'position:sticky;top:0;z-index:20;padding:8px 12px;' +
+          'font-size:.9em;text-align:center;border-bottom:2px solid #000;';
+        document.body.insertBefore(banner, document.body.firstChild);
+      }
+      const pending = listPending().length;
+      const online = navigator.onLine;
+      if (pending > 0){
+        banner.style.background = online ? '#063' : '#430';
+        banner.style.color = '#fff';
+        banner.textContent = `⏳ ${pending} lokal gespeicherte(r) Eintrag/Einträge – ` +
+          (online ? 'wird synchronisiert…' : 'offline – wird übertragen, sobald Verbindung besteht.');
+      } else if (online) {
+        banner.style.background = '#0a2a3a';
+        banner.style.color = '#9fd';
+        banner.textContent = '✅ Alle Einträge synchronisiert.';
+        setTimeout(() => { if (banner && banner.parentNode) banner.remove(); }, 4000);
+      } else {
+        banner.style.background = '#430';
+        banner.style.color = '#fc9';
+        banner.textContent = '📡 Offline – neue Einträge werden lokal gespeichert.';
+      }
+    }
+
+    async function tryFlush(){
+      const pending = listPending();
+      if (pending.length === 0){ updateBanner(); return; }
+      for (const {key, data} of pending){
+        try {
+          const fd = new FormData();
+          for (const [k, v] of Object.entries(data.fields)) fd.append(k, v);
+          if (data.image && data.image.dataUrl){
+            const blob = await (await fetch(data.image.dataUrl)).blob();
+            fd.append('image', blob, data.image.name || 'card.jpg');
+          }
+          const resp = await fetch('/api/' + TOKEN + '/sync', {
+            method:'POST', body: fd
+          });
+          if (resp.ok){
+            const json = await resp.json().catch(()=>({status:'synced'}));
+            if (json.status === 'synced' || json.status === 'duplicate'){
+              localStorage.removeItem(key);
+            } else {
+              localStorage.setItem(key, JSON.stringify(Object.assign(data,{
+                attempts:(data.attempts||0)+1,
+                last_error: json.message || 'Serverfehler'})));
+            }
+          }
+        } catch(e){ /* Netzwerkfehler → Eintrag bleibt */ }
+      }
+      updateBanner();
+    }
+
+    document.addEventListener('submit', async (ev) => {
+      const form = ev.target;
+      if (!form.action || !form.action.includes('/api/' + TOKEN + '/submit')) return;
+      ev.preventDefault();
+      const formData = new FormData(form);
+      const fields = {};
+      let image = null;
+      for (const [k, v] of formData.entries()){
+        if (v instanceof File){
+          if (v.size > 0){
+            const dataUrl = await new Promise(res => {
+              const fr = new FileReader();
+              fr.onload = () => res(fr.result);
+              fr.readAsDataURL(v);
+            });
+            image = {name: v.name, dataUrl};
+          }
+        } else { fields[k] = v; }
+      }
+      if (!fields.request_id){
+        fields.request_id = 'off_' + Math.random().toString(36).slice(2) + Date.now();
+      }
+      const entry = {fields, image, attempts: 0, savedAt: Date.now()};
+      localStorage.setItem(PENDING_PREFIX + fields.request_id, JSON.stringify(entry));
+      updateBanner();
+      tryFlush();
+
+      const card = form.closest('.card');
+      if (card){
+        const ok = document.createElement('div');
+        ok.className = 'ok';
+        ok.textContent = '💾 Lokal gespeichert. Übertragung läuft…';
+        card.parentNode.insertBefore(ok, card);
+        setTimeout(() => ok.remove(), 6000);
+      }
+    }, true);
+
+    window.addEventListener('online', () => { updateBanner(); tryFlush(); });
+    window.addEventListener('offline', updateBanner);
+    setInterval(() => { if (navigator.onLine) tryFlush(); }, 15000);
+    updateBanner();
+    tryFlush();
+  })();
+  </script>
 </body>
 </html>
 """
 
-
-# ---------- Neue Auth-Templates ----------
 
 WEB_LOGIN_BODY = """
 <div class="card">
@@ -141,11 +258,6 @@ WEB_ADMIN_BODY = """
 """
 
 
-# ---------- Bestehende Templates ----------
-
-# FIX: CSRF-Felder entfernt. Die API authentifiziert über den URL-Token,
-# CSRF ist dort redundant. Ohne Session-Cookie funktioniert der Flow
-# auch auf Mobilgeräten, die Cookies auf LAN-IPs blockieren.
 SCAN_BODY = """
 {{ msg_html|safe }}
 
@@ -186,6 +298,8 @@ SCAN_BODY = """
     <input name="position" placeholder="Position">
     <input name="phone" placeholder="Telefon" type="tel">
     <input name="email" placeholder="E-Mail" type="email">
+    <input name="website" placeholder="Webseite (z. B. www.firma.de)" type="text">
+    <input name="address" placeholder="Adresse (Straße, PLZ Ort)">
     <select name="status">
       {% for s in statuses %}<option>{{ s }}</option>{% endfor %}
     </select>
@@ -224,10 +338,10 @@ def _theme_css(db):
     return build_web_css(get_theme(db.get_setting("theme", "Flipper")))
 
 
-def _page(db, emp=None, fair_name=None, body=""):
+def _page(db, emp=None, fair_name=None, body="", token=None):
     return render_template_string(
         BASE_HTML, emp=emp, fair_name=fair_name, body=body,
-        web_css=_theme_css(db))
+        web_css=_theme_css(db), token=token)
 
 
 def _active_employee(db, token):
@@ -306,9 +420,6 @@ def create_app(db):
 
     auth = AuthService(db)
 
-    # ---------------------------------------------------------------
-    # CSRF-Helper (Jinja-Global)
-    # ---------------------------------------------------------------
     def _generate_csrf_token():
         if "_csrf_token" not in session:
             session["_csrf_token"] = uuid.uuid4().hex
@@ -316,22 +427,14 @@ def create_app(db):
 
     app.jinja_env.globals["csrf_token"] = _generate_csrf_token
 
-    # ---------------------------------------------------------------
-    # before_request #1: Auth-Gate
-    # MUSS vor csrf_protect registriert werden, damit dieser zuerst
-    # läuft und unautorisierte Zugriffe früh abweist.
-    # ---------------------------------------------------------------
     @app.before_request
     def _auth_gate():
-        # Token-basierte Routen (Mitarbeiter-Zugang per QR, kein Passwort)
         if (request.path.startswith("/scan/")
                 or request.path.startswith("/api/")
                 or request.path.startswith("/static/")):
             return None
-        # Öffentliche Seiten
         if request.path in ("/", "/login"):
             return None
-        # Geschützte Seiten
         if request.path.startswith("/admin") or request.path == "/logout":
             token = session.get("session_token")
             user = auth.user_for_session(token)
@@ -342,21 +445,8 @@ def create_app(db):
             g.web_user = user
         return None
 
-    # ---------------------------------------------------------------
-    # before_request #2: CSRF-Schutz
-    # Gilt für alle POSTs außer /api/* (dort Auth über URL-Token).
-    # ---------------------------------------------------------------
     @app.before_request
     def csrf_protect():
-        """CSRF-Schutz NUR für session-basierte POSTs.
-
-        Die /api/<token>/* Routen authentifizieren sich über den
-        URL-Token selbst (128 Bit, widerrufbar, nur per QR geteilt).
-        Ein zusätzlicher Session-CSRF ist dort redundant UND bricht
-        auf Mobilgeräten, die Cookies auf LAN-IP-Adressen blockieren
-        (z. B. iOS Safari mit "Website-übergreifendes Tracking
-        verhindern").
-        """
         if request.method == "POST":
             if request.path.startswith("/api/"):
                 return None
@@ -377,9 +467,6 @@ def create_app(db):
                 )
         return None
 
-    # ---------------------------------------------------------------
-    # Helper
-    # ---------------------------------------------------------------
     def _active_fair_day():
         return db.get_active_fair_day()
 
@@ -393,13 +480,18 @@ def create_app(db):
         return [s["name"] for s in db.list_statuses(active_only=True)]
 
     def _error_page(db, emp, token, message):
-        return _page(db, emp=emp, body=(
+        return _page(db, emp=emp, token=token, body=(
             f'<div class="err">{escape(message)}</div>'
             f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
-    # ---------------------------------------------------------------
-    # Öffentliche Startseite
-    # ---------------------------------------------------------------
+    def _store_extras(contact_id, address, website):
+        try:
+            set_contact_extras(db, contact_id,
+                               address=address, website=website)
+        except Exception:
+            logger.exception("Adresse/Webseite konnten nicht gespeichert "
+                             "werden (contact_id=%s)", contact_id)
+
     @app.route("/")
     def index():
         return _page(db, body=(
@@ -410,9 +502,6 @@ def create_app(db):
             '<a href="/login" class="link">→ Admin-Login</a></p>'
             '</div>'))
 
-    # ---------------------------------------------------------------
-    # Login / Logout / Admin
-    # ---------------------------------------------------------------
     @app.route("/login", methods=["GET", "POST"])
     def web_login():
         error = ""
@@ -427,7 +516,6 @@ def create_app(db):
                 session["session_token"] = token
                 session.permanent = True
 
-                # Sicheres Redirect-Ziel bestimmen (keine Open Redirects)
                 nxt = request.args.get("next") or "/admin"
                 if not (nxt.startswith("/")
                         and not nxt.startswith("//")
@@ -458,9 +546,6 @@ def create_app(db):
             is_admin=g.web_user.get("is_admin", False),
             perms=perms))
 
-    # ---------------------------------------------------------------
-    # Mitarbeiter-Scan (Token-basiert, kein Login)
-    # ---------------------------------------------------------------
     @app.route("/scan/<token>")
     def scan_page(token):
         emp, err = _active_employee(db, token)
@@ -469,7 +554,7 @@ def create_app(db):
 
         ad = _active_fair_day()
         if not ad:
-            return _page(db, emp=emp, body=(
+            return _page(db, emp=emp, token=token, body=(
                 '<div class="warn">⚠️ <b>Aktuell läuft kein Messetag.</b>'
                 '<br><br>Bitte wende dich an das Standpersonal.</div>'))
 
@@ -490,11 +575,8 @@ def create_app(db):
             req_id=uuid.uuid4().hex, fair_name=fair_name,
             fair_day=ad["day_date"], is_present=is_present,
             since_short=since_short, msg_html=msg_html)
-        return _page(db, emp=emp, fair_name=fair_name, body=body)
+        return _page(db, emp=emp, fair_name=fair_name, body=body, token=token)
 
-    # ---------------------------------------------------------------
-    # API: Kontakt einreichen (Token-basiert)
-    # ---------------------------------------------------------------
     @app.route("/api/<token>/submit", methods=["POST"])
     def api_submit(token):
         emp, err = _active_employee(db, token)
@@ -511,6 +593,8 @@ def create_app(db):
         position = request.form.get("position", "").strip()
         phone = request.form.get("phone", "").strip()
         email = request.form.get("email", "").strip()
+        website = request.form.get("website", "").strip()
+        address = request.form.get("address", "").strip()
         notes = request.form.get("notes", "").strip()
         status = request.form.get("status", "").strip()
 
@@ -520,7 +604,8 @@ def create_app(db):
 
         file = request.files.get("image")
         has_photo = file is not None and file.filename != ""
-        has_fields = any([name, company, position, phone, email, notes])
+        has_fields = any([name, company, position, phone, email,
+                          website, address, notes])
 
         if not has_photo and not has_fields:
             return _error_page(db, emp, token,
@@ -560,7 +645,8 @@ def create_app(db):
                 return _error_page(db, emp, token,
                                    f"Speichern fehlgeschlagen: {e}"), 500
 
-            return _page(db, emp=emp, body=(
+            _store_extras(contact_id, address, website)
+            return _page(db, emp=emp, token=token, body=(
                 '<div class="ok">✔ Kontakt gespeichert (mit Foto).</div>'
                 f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
@@ -580,12 +666,12 @@ def create_app(db):
                        f'und geprüft.')
             else:
                 msg = f'✔ Karte war bereits vorhanden (ID {card["id"]}).'
-            return _page(db, emp=emp, body=(
+            return _page(db, emp=emp, token=token, body=(
                 f'<div class="ok">{msg}</div>'
                 f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
         try:
-            db.create_contact(
+            contact_id = db.create_contact(
                 fair_id=ad["fair_id"], source="Smartphone",
                 employee_id=emp["id"], fair_day_id=ad["id"],
                 name=name, company=company, position=position,
@@ -594,13 +680,120 @@ def create_app(db):
         except Exception as e:
             return _error_page(db, emp, token,
                                f"Speichern fehlgeschlagen: {e}"), 500
-        return _page(db, emp=emp, body=(
+
+        _store_extras(contact_id, address, website)
+        return _page(db, emp=emp, token=token, body=(
             '<div class="ok">✔ Kontakt gespeichert.</div>'
             f'<p><a href="/scan/{token}" class="link">← Zurück</a></p>'))
 
-    # ---------------------------------------------------------------
-    # API: Anwesenheit (Token-basiert)
-    # ---------------------------------------------------------------
+    @app.route("/api/<token>/sync", methods=["POST"])
+    def api_sync(token):
+        """Idempotenter JSON-Endpunkt für die Offline-Warteschlange."""
+        emp, err = _active_employee(db, token)
+        if err:
+            page, code = err
+            return (json.dumps({"status": "error",
+                                "message": "Token ungültig."}),
+                    code, {"Content-Type": "application/json"})
+
+        ad = _active_fair_day()
+        if not ad:
+            return (json.dumps({"status": "error",
+                                "message": "Kein aktiver Messetag."}),
+                    400, {"Content-Type": "application/json"})
+
+        req_id = (request.form.get("request_id") or "").strip()
+        if not req_id:
+            return (json.dumps({"status": "error",
+                                "message": "request_id fehlt."}),
+                    400, {"Content-Type": "application/json"})
+
+        with db._lock:
+            existing_contact = db.conn.execute(
+                "SELECT id FROM contacts WHERE external_id=?",
+                (req_id,)).fetchone()
+            existing_card = db.conn.execute(
+                "SELECT id FROM card_queue WHERE external_id=?",
+                (req_id,)).fetchone()
+        if existing_contact or existing_card:
+            return (json.dumps({
+                "status": "duplicate",
+                "contact_id": existing_contact["id"]
+                              if existing_contact else None,
+                "card_id": existing_card["id"]
+                           if existing_card else None,
+            }), 200, {"Content-Type": "application/json"})
+
+        name = request.form.get("name", "").strip()
+        company = request.form.get("company", "").strip()
+        position = request.form.get("position", "").strip()
+        phone = request.form.get("phone", "").strip()
+        email = request.form.get("email", "").strip()
+        website = request.form.get("website", "").strip()
+        address = request.form.get("address", "").strip()
+        notes = request.form.get("notes", "").strip()
+        status = request.form.get("status", "").strip()
+        valid = _statuses()
+        if status not in valid:
+            status = valid[0] if valid else "Interessiert"
+
+        file = request.files.get("image")
+        has_photo = file is not None and file.filename != ""
+        has_fields = any([name, company, position, phone, email,
+                          website, address, notes])
+        if not has_photo and not has_fields:
+            return (json.dumps({"status": "error",
+                                "message": "Leerer Eintrag."}),
+                    400, {"Content-Type": "application/json"})
+
+        image_path = None
+        if has_photo:
+            try:
+                image_path = _save_upload(file, req_id)
+            except Exception as e:
+                return (json.dumps({"status": "error",
+                                    "message": f"Bild: {e}"}),
+                        500, {"Content-Type": "application/json"})
+
+        try:
+            if has_fields and image_path:
+                contact_id, _card, _created = db.create_contact_with_card(
+                    fair_id=ad["fair_id"], source="Smartphone",
+                    employee_id=emp["id"], fair_day_id=ad["id"],
+                    name=name, company=company, position=position,
+                    phone=phone, email=email, status=status, notes=notes,
+                    image_path=image_path,
+                    original_filename=file.filename, external_id=req_id)
+                _store_extras(contact_id, address, website)
+                return (json.dumps({"status": "synced",
+                                    "contact_id": contact_id}),
+                        200, {"Content-Type": "application/json"})
+
+            if image_path:
+                card, _created = db.enqueue_card(
+                    fair_id=ad["fair_id"], image_path=image_path,
+                    fair_day_id=ad["id"], employee_id=emp["id"],
+                    original_filename=file.filename, external_id=req_id)
+                return (json.dumps({"status": "synced",
+                                    "card_id": card["id"]}),
+                        200, {"Content-Type": "application/json"})
+
+            contact_id = db.create_contact(
+                fair_id=ad["fair_id"], source="Smartphone",
+                employee_id=emp["id"], fair_day_id=ad["id"],
+                name=name, company=company, position=position,
+                phone=phone, email=email, status=status, notes=notes,
+                external_id=req_id)
+            _store_extras(contact_id, address, website)
+            return (json.dumps({"status": "synced",
+                                "contact_id": contact_id}),
+                    200, {"Content-Type": "application/json"})
+        except Exception as e:
+            logger.exception("Sync-Fehler: %s", e)
+            return (json.dumps({"status": "error",
+                                "message": str(e)}),
+                    500, {"Content-Type": "application/json"})
+
     @app.route("/api/<token>/attendance", methods=["POST"])
     def api_attendance(token):
         emp, err = _active_employee(db, token)

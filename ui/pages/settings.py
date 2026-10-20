@@ -161,6 +161,9 @@ class SettingsPage(QWidget):
             "Löschen ist nur möglich, wenn kein Kontakt den Status verwendet."))
         v.addWidget(status_box)
 
+        # ---- Eigene Felder ----
+        self._build_custom_fields_box(v)
+
         # ---- Server ----
         server_box = QGroupBox("Lokaler Webserver")
         svv = QVBoxLayout(server_box)
@@ -206,6 +209,7 @@ class SettingsPage(QWidget):
         self.auto_logout_spin.setValue(cur_auto)
 
         self._load_statuses()
+        self._load_custom_fields()
 
     def _load_statuses(self):
         rows = self.ctx.db.list_statuses(active_only=False)
@@ -341,6 +345,170 @@ class SettingsPage(QWidget):
                 except Exception:
                     pass
 
+    # ---- Eigene Felder ----
+    def _build_custom_fields_box(self, parent_layout):
+        box = QGroupBox("Eigene Felder (pro Messe konfigurierbar)")
+        bv = QVBoxLayout(box)
+
+        self.cf_scope = QComboBox()
+        self.cf_scope.addItem("Gilt für alle Messen", None)
+        for fair in self.ctx.db.list_fairs(include_archived=False):
+            self.cf_scope.addItem(f"Messe: {fair['name']}", fair["id"])
+        self.cf_scope.currentIndexChanged.connect(self._load_custom_fields)
+        bv.addWidget(self.cf_scope)
+
+        self.cf_table = QTableWidget(0, 6)
+        self.cf_table.setHorizontalHeaderLabels(
+            ["ID", "Bezeichnung", "Typ", "Pflicht", "Sortierung", "Aktiv"])
+        self.cf_table.horizontalHeader().setStretchLastSection(True)
+        self.cf_table.setMinimumHeight(160)
+        bv.addWidget(self.cf_table)
+
+        row = QHBoxLayout()
+        b_add = QPushButton("Feld hinzufügen")
+        b_add.clicked.connect(self._add_custom_field)
+        b_edit = QPushButton("Bearbeiten")
+        b_edit.setObjectName("Ghost")
+        b_edit.clicked.connect(self._edit_custom_field)
+        b_del = QPushButton("Löschen")
+        b_del.setObjectName("Ghost")
+        b_del.clicked.connect(self._delete_custom_field)
+        row.addWidget(b_add)
+        row.addWidget(b_edit)
+        row.addWidget(b_del)
+        row.addStretch(1)
+        bv.addLayout(row)
+        parent_layout.addWidget(box)
+
+    def _load_custom_fields(self):
+        from core import custom_fields as cf
+        fair_id = self.cf_scope.currentData() if hasattr(self, "cf_scope") else None
+        try:
+            fields = cf.list_fields(
+                self.ctx.db, fair_id=fair_id,
+                entity_type="contact", active_only=False)
+        except Exception:
+            fields = []
+        self.cf_table.setRowCount(len(fields))
+        for r, f in enumerate(fields):
+            self.cf_table.setItem(r, 0, QTableWidgetItem(str(f["id"])))
+            self.cf_table.setItem(r, 1, QTableWidgetItem(f["label"]))
+            self.cf_table.setItem(r, 2, QTableWidgetItem(f["field_type"]))
+            self.cf_table.setItem(
+                r, 3, QTableWidgetItem("Ja" if f["required"] else "Nein"))
+            self.cf_table.setItem(r, 4, QTableWidgetItem(str(f["sort_order"])))
+            self.cf_table.setItem(
+                r, 5, QTableWidgetItem("Ja" if f["active"] else "Nein"))
+
+    def _add_custom_field(self):
+        from PyQt5.QtWidgets import (
+            QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QComboBox,
+            QCheckBox, QSpinBox,
+        )
+        from core import custom_fields as cf
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Eigenes Feld anlegen")
+        form = QFormLayout(dlg)
+        inp_label = QLineEdit()
+        inp_type = QComboBox()
+        for key, label in (("text", "Text"), ("number", "Zahl"),
+                           ("date", "Datum"), ("select", "Auswahl"),
+                           ("checkbox", "Ja/Nein"), ("multiline", "Mehrzeilig")):
+            inp_type.addItem(label, key)
+        inp_required = QCheckBox("Pflichtfeld")
+        inp_order = QSpinBox()
+        inp_order.setRange(0, 10000)
+        inp_order.setValue(100)
+        inp_options = QLineEdit()
+        inp_options.setPlaceholderText(
+            "Nur bei Typ „Auswahl“: Optionen mit Komma trennen")
+        form.addRow("Bezeichnung:", inp_label)
+        form.addRow("Typ:", inp_type)
+        form.addRow("Optionen:", inp_options)
+        form.addRow("Pflichtfeld:", inp_required)
+        form.addRow("Sortierung:", inp_order)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        form.addRow(bb)
+        if not dlg.exec_():
+            return
+        try:
+            options = []
+            if inp_type.currentData() == "select":
+                options = [o.strip() for o in
+                           inp_options.text().split(",") if o.strip()]
+            cf.create_field(
+                self.ctx.db,
+                label=inp_label.text(),
+                field_type=inp_type.currentData(),
+                entity_type="contact",
+                fair_id=self.cf_scope.currentData(),
+                options=options,
+                required=inp_required.isChecked(),
+                sort_order=inp_order.value())
+        except Exception as e:
+            QMessageBox.warning(self, "Anlegen fehlgeschlagen", str(e))
+            return
+        self._load_custom_fields()
+
+    def _edit_custom_field(self):
+        from PyQt5.QtWidgets import (
+            QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
+            QCheckBox, QSpinBox,
+        )
+        from core import custom_fields as cf
+        row = self.cf_table.currentRow()
+        if row < 0:
+            return
+        fid = int(self.cf_table.item(row, 0).text())
+        fields = cf.list_fields(self.ctx.db, entity_type="contact",
+                                active_only=False)
+        field = next((f for f in fields if f["id"] == fid), None)
+        if not field:
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Feld bearbeiten")
+        form = QFormLayout(dlg)
+        inp_label = QLineEdit(field["label"])
+        inp_required = QCheckBox("Pflichtfeld")
+        inp_required.setChecked(bool(field["required"]))
+        inp_order = QSpinBox()
+        inp_order.setRange(0, 10000)
+        inp_order.setValue(field["sort_order"])
+        inp_active = QCheckBox("Aktiv")
+        inp_active.setChecked(bool(field["active"]))
+        form.addRow("Bezeichnung:", inp_label)
+        form.addRow("Pflichtfeld:", inp_required)
+        form.addRow("Sortierung:", inp_order)
+        form.addRow("Aktiv:", inp_active)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+        form.addRow(bb)
+        if not dlg.exec_():
+            return
+        cf.update_field(
+            self.ctx.db, fid,
+            label=inp_label.text(),
+            required=inp_required.isChecked(),
+            sort_order=inp_order.value(),
+            active=inp_active.isChecked())
+        self._load_custom_fields()
+
+    def _delete_custom_field(self):
+        from core import custom_fields as cf
+        row = self.cf_table.currentRow()
+        if row < 0:
+            return
+        fid = int(self.cf_table.item(row, 0).text())
+        if QMessageBox.question(
+                self, "Löschen",
+                "Feld und alle zugehörigen Werte löschen?") != QMessageBox.Yes:
+            return
+        cf.delete_field(self.ctx.db, fid)
+        self._load_custom_fields()
+
     # ---- Backup ----
     def backup(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -353,7 +521,6 @@ class SettingsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
-    # ---- Restore (staged + Restart) ----
     def restore(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Backup wählen", "", "ZIP (*.zip)")

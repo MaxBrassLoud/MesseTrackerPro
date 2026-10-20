@@ -48,12 +48,10 @@ class MainWindow(QMainWindow):
         self.user = user
         self.session_token = session_token
 
-        # Attribute für Benutzerwechsel (werden von _do_logout gefüllt)
         self._pending_user = None
         self._pending_token = None
-
-        # Full-Page-Kundenakte (lazy angelegt)
         self._profile_page = None
+        self._company_page = None
 
         self.setWindowTitle(
             f"Messe Tracker Pro – "
@@ -66,7 +64,6 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # ---- Sidebar (Referenz behalten, damit sie ausgeblendet werden kann) ----
         self.sidebar = QWidget()
         self.sidebar.setObjectName("Sidebar")
         self.sidebar.setFixedWidth(220)
@@ -80,7 +77,6 @@ class MainWindow(QMainWindow):
         sb.addWidget(title)
         sb.addStretch(1)
 
-        # ---- Seiten ----
         self.stack = QStackedWidget()
         self.pages = {}
         self.group = QButtonGroup(self)
@@ -128,7 +124,6 @@ class MainWindow(QMainWindow):
             self.group.addButton(b)
             sb.addWidget(b)
 
-        # ---- Benutzerinfo + Logout ----
         sb.addStretch(1)
         info = QLabel(
             f"👤 {user.get('display_name') or user['username']}"
@@ -152,30 +147,24 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.sidebar)
         layout.addWidget(self.stack, 1)
 
-        # Erste Seite auswählen
         first = next(iter(self.pages), None)
         if first:
             self.group.buttons()[0].setChecked(True)
             self.show_page(first)
 
-        # ---- Blur-Effekt für Logout ----
         self._blur_effect = QGraphicsBlurEffect()
         self._blur_effect.setBlurRadius(0)
         self._blur_effect.setEnabled(False)
         root.setGraphicsEffect(self._blur_effect)
 
-        # ---- Idle-Detection ----
         self._last_activity = datetime.now()
         self._last_timeout_min = DEFAULT_AUTO_LOGOUT_MINUTES
         self._idle_timer = QTimer(self)
-        self._idle_timer.setInterval(5000)  # alle 5 Sekunden prüfen
+        self._idle_timer.setInterval(5000)
         self._idle_timer.timeout.connect(self._check_idle)
         self._idle_timer.start()
         QApplication.instance().installEventFilter(self)
 
-    # ------------------------------------------------------------------
-    # Idle / Auto-Logout
-    # ------------------------------------------------------------------
     def eventFilter(self, obj, event):
         if event.type() in (
             QEvent.MouseMove, QEvent.MouseButtonPress,
@@ -207,18 +196,13 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
                 return
 
-        # 1. Idle-Timer stoppen (sonst feuert er während des Logins erneut)
         self._idle_timer.stop()
 
-        # 2. Session invalidieren
         try:
             self.auth.logout(self.session_token)
         except Exception:
             logging.exception("Logout der Session fehlgeschlagen.")
 
-        # 3. Blur einschalten: der eingefrorene Screen bleibt sichtbar,
-        #    ist aber nicht mehr interaktiv – der Login-Dialog erscheint
-        #    als separates Top-Level-Fenster ungeblurrt darüber.
         self._blur_effect.setEnabled(True)
         self._blur_effect.setBlurRadius(28)
 
@@ -229,18 +213,15 @@ class MainWindow(QMainWindow):
                 f"Inaktivität abgemeldet.\n\n"
                 f"Bitte melden Sie sich neu an, um fortzufahren.")
 
-        # 4. Login-Dialog über dem geblurrten Fenster
         from ui.login_dialog import LoginDialog
         dlg = LoginDialog(self.auth, self)
         if not dlg.exec_() or not dlg.user:
-            # Abbrechen → App beenden
             QApplication.quit()
             return
 
         new_user = dlg.user
         new_token = dlg.session_token
 
-        # 5. Bei Benutzerwechsel: Window-Rebuild über main.py-Loop
         same_user = (
             new_user["id"] == self.user["id"]
             and bool(new_user.get("is_admin")) == bool(self.user.get("is_admin"))
@@ -251,7 +232,6 @@ class MainWindow(QMainWindow):
             QApplication.exit(42)
             return
 
-        # 6. Gleicher Benutzer → Blur entfernen, Timer neu starten
         self.user = new_user
         self.session_token = new_token
         self.setWindowTitle(
@@ -263,10 +243,9 @@ class MainWindow(QMainWindow):
         self._idle_timer.start()
 
     # ------------------------------------------------------------------
-    # Full-Page Kundenakte
+    # Vollflächige Kundenakte
     # ------------------------------------------------------------------
     def open_contact_profile(self, contact):
-        """Öffnet die Kundenakte vollflächig, blendet die Sidebar aus."""
         if self._profile_page is None:
             from ui.pages.contact_profile import ContactProfilePage
             self._profile_page = ContactProfilePage(
@@ -277,9 +256,25 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self._profile_page)
 
     def close_contact_profile(self):
-        """Kehrt aus der Kundenakte zur Kundenkartei zurück."""
         self.sidebar.setVisible(True)
         self._profile_page.current_contact = None
+        self.show_page("contacts")
+
+    # ------------------------------------------------------------------
+    # Vollflächige Firmenakte
+    # ------------------------------------------------------------------
+    def open_company_profile(self, company_id: int):
+        if self._company_page is None:
+            from ui.pages.company_profile import CompanyProfilePage
+            self._company_page = CompanyProfilePage(
+                self.ctx, self, self.pages["contacts"])
+            self.stack.addWidget(self._company_page)
+        self._company_page.set_company(company_id)
+        self.sidebar.setVisible(False)
+        self.stack.setCurrentWidget(self._company_page)
+
+    def close_company_profile(self):
+        self.sidebar.setVisible(True)
         self.show_page("contacts")
 
     # ------------------------------------------------------------------
@@ -294,7 +289,6 @@ class MainWindow(QMainWindow):
         page = self.pages.get(key)
         if not page:
             return
-        # Wenn wir zu einer normalen Seite wechseln, Sidebar sicherstellen
         if not self.sidebar.isVisible():
             self.sidebar.setVisible(True)
         self.stack.setCurrentWidget(page)

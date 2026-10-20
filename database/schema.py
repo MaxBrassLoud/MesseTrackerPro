@@ -1,4 +1,4 @@
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS app_meta (
@@ -262,4 +262,82 @@ CREATE TABLE IF NOT EXISTS contact_channels (
     value TEXT NOT NULL, label TEXT, is_primary INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_contact_channels_contact ON contact_channels(contact_id);
+
+-- ================== v9: Datenqualität, Offline-Sync, Custom Fields ==================
+
+CREATE TABLE IF NOT EXISTS contact_ocr_details (
+    contact_id INTEGER PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+    field_confidence_json TEXT,       -- {"name":0.82,"company":0.55,...}
+    detected_language TEXT,           -- 'de','en','fr','es','it','mixed'
+    raw_text TEXT,
+    ocr_engine TEXT,
+    processed_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS company_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    actor_name TEXT,
+    note TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_company_notes_company
+    ON company_notes(company_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS sync_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id TEXT NOT NULL,
+    request_id TEXT NOT NULL UNIQUE,
+    endpoint TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','synced','error','duplicate')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    synced_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_status
+    ON sync_queue(status, created_at);
+
+CREATE TABLE IF NOT EXISTS custom_fields (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fair_id INTEGER REFERENCES fairs(id) ON DELETE CASCADE,  -- NULL = global
+    entity_type TEXT NOT NULL DEFAULT 'contact'
+        CHECK(entity_type IN ('contact','company')),
+    field_key TEXT NOT NULL,           -- stabiler Schlüssel (snake_case)
+    label TEXT NOT NULL,
+    field_type TEXT NOT NULL DEFAULT 'text'
+        CHECK(field_type IN ('text','number','date','select','checkbox','multiline')),
+    options_json TEXT,                 -- JSON-Array für 'select'
+    required INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 100,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    UNIQUE(fair_id, entity_type, field_key)
+);
+CREATE INDEX IF NOT EXISTS idx_custom_fields_fair
+    ON custom_fields(fair_id, entity_type, active, sort_order);
+
+CREATE TABLE IF NOT EXISTS custom_field_values (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    field_id INTEGER NOT NULL REFERENCES custom_fields(id) ON DELETE CASCADE,
+    contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    value TEXT,
+    updated_at TEXT NOT NULL,
+    UNIQUE(field_id, contact_id, company_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cfv_contact ON custom_field_values(contact_id);
+CREATE INDEX IF NOT EXISTS idx_cfv_company ON custom_field_values(company_id);
+
+CREATE TABLE IF NOT EXISTS duplicate_dismissals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_a INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    contact_b INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    dismissed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    dismissed_at TEXT NOT NULL,
+    UNIQUE(contact_a, contact_b)
+);
 """

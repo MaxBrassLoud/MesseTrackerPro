@@ -6,11 +6,19 @@ from PyQt5.QtWidgets import (
     QComboBox, QTableWidget, QTableWidgetItem, QMessageBox, QDialog,
     QFormLayout, QTextEdit, QDialogButtonBox, QScrollArea,
     QSizePolicy, QHeaderView, QAbstractItemView, QTabWidget,
-    QListWidget, QListWidgetItem, QCheckBox, QFrame)
+    QListWidget, QListWidgetItem, QCheckBox, QFrame, QGroupBox)
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 
 from ui.widgets import FullSizeImageDialog
+from core.duplicates import (
+    find_similar_contacts, company_similarity_warning,
+)
+from core import custom_fields as cf
+from core.contact_extras import (
+    get_contact_address, get_contact_website, set_contact_extras,
+)
+from ui.dialogs.merge_dialog import MergeContactDialog
 
 
 def _fmt_dt(iso):
@@ -21,29 +29,7 @@ def _fmt_dt(iso):
 
 def _best_address_for_contact(ctx, contact):
     """Firmenadresse bevorzugt, sonst Kontaktadresse, sonst ''."""
-    if not contact:
-        return ""
-    cid = contact.get("id")
-    company_id = contact.get("company_id")
-    if company_id:
-        try:
-            addr = ctx.db.get_company_address(company_id)
-            if addr:
-                return addr
-        except Exception:
-            pass
-    if cid:
-        addresses = ctx.db.list_contact_addresses(cid)
-        if addresses:
-            a = addresses[0]
-            return ", ".join(
-                part for part in (
-                    a.get("street"),
-                    " ".join(p for p in (a.get("postal_code"),
-                                         a.get("city")) if p),
-                    a.get("country"),
-                ) if part)
-    return ""
+    return get_contact_address(ctx.db, contact)
 
 
 # ======================================================================
@@ -53,12 +39,12 @@ class ContactDialog(QDialog):
     """Dialog zum Anlegen/Bearbeiten eines Ansprechpartners.
 
     Wichtig:
-    - Die Firma wird anhand des Feldes „Firma" automatisch erzeugt
-      (nur mit Namen – weitere Firmendaten werden nicht gesetzt).
-    - „Adresse" wird, sobald eine Firma existiert, an DIESER gespeichert.
-      Nur wenn kein Firmenname angegeben wurde, landet sie als
-      Notfall-Fallback am Kontakt.
+    - Die Firma wird anhand des Feldes „Firma" automatisch erzeugt.
+    - „Adresse" wird bevorzugt an der Firma gespeichert.
+    - „Webseite" wird bevorzugt an der Firma gespeichert, sonst als
+      Kontaktweg vom Typ 'website'.
     - Position/Telefon/E-Mail gehören immer zum Ansprechpartner.
+    - Eigene Felder (pro Messe konfigurierbar) werden dynamisch eingebunden.
     """
 
     def __init__(self, parent, contact=None, ctx=None):
@@ -73,27 +59,41 @@ class ContactDialog(QDialog):
         hint = QLabel(
             "Der Kontakt ist ein <b>Ansprechpartner</b> einer Firma. "
             "Die Firma wird aus dem Feld „Firma“ automatisch angelegt, "
-            "falls sie noch nicht existiert. Die <b>Adresse</b> gehört "
-            "zur Firma, <b>Position</b>, <b>Telefon</b> und "
-            "<b>E-Mail</b> gehören zum Ansprechpartner.")
+            "falls sie noch nicht existiert. Die <b>Adresse</b> und "
+            "<b>Webseite</b> gehören zur Firma (Fallback: Kontakt). "
+            "<b>Position</b>, <b>Telefon</b> und <b>E-Mail</b> gehören "
+            "zum Ansprechpartner.")
         hint.setWordWrap(True)
         hint.setStyleSheet(
             "color:#888;font-size:9pt;padding-bottom:6px;")
         form.addRow(hint)
 
         self.inp = {}
-        for k in ("name", "company", "position", "phone", "email", "notes"):
-            if k == "notes":
+        field_labels = [
+            ("name", "Name"),
+            ("company", "Firma"),
+            ("position", "Position"),
+            ("phone", "Telefon"),
+            ("email", "E-Mail"),
+            ("website", "Webseite"),
+            ("notes", "Notizen"),
+        ]
+        for key, label in field_labels:
+            if key == "notes":
                 w = QTextEdit()
                 w.setMinimumHeight(70)
                 if contact:
-                    w.setPlainText(contact[k] or "")
+                    w.setPlainText(contact.get("notes") or "")
+            elif key == "website":
+                w = QLineEdit()
+                if contact:
+                    w.setText(get_contact_website(ctx.db, contact))
             else:
                 w = QLineEdit()
                 if contact:
-                    w.setText(contact[k] or "")
-            form.addRow(k.capitalize(), w)
-            self.inp[k] = w
+                    w.setText(contact.get(key) or "")
+            form.addRow(label, w)
+            self.inp[key] = w
 
         self.address = QLineEdit()
         self.address.setPlaceholderText(
@@ -119,16 +119,74 @@ class ContactDialog(QDialog):
                 self.status.setCurrentIndex(idx)
         form.addRow("Status", self.status)
 
+        # ---- Eigene Felder ----
+        self._custom_widgets: dict[int, object] = {}
+        self._custom_fields = []
+        try:
+            self._custom_fields = cf.list_fields(
+                ctx.db, fair_id=ctx.current_fair_id,
+                entity_type="contact", active_only=True)
+        except Exception:
+            self._custom_fields = []
+        if self._custom_fields:
+            form.addRow(QLabel("<b>Eigene Felder</b>"))
+            existing_vals = (cf.get_values(ctx.db, contact_id=contact["id"])
+                             if contact else {})
+            for field in self._custom_fields:
+                w = self._make_custom_widget(
+                    field, existing_vals.get(field["id"], ""))
+                self._custom_widgets[field["id"]] = w
+                label = field["label"] + (" *" if field["required"] else "")
+                form.addRow(label, w)
+
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         form.addRow(bb)
+
+    def _make_custom_widget(self, field, value):
+        ft = field["field_type"]
+        if ft == "select":
+            combo = QComboBox()
+            combo.addItem("")
+            for opt in field.get("options", []):
+                combo.addItem(opt)
+            idx = combo.findText(value or "")
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            return combo
+        if ft == "checkbox":
+            cb = QCheckBox()
+            cb.setChecked(str(value).lower() in ("1", "true", "ja", "yes"))
+            return cb
+        if ft == "multiline":
+            w = QTextEdit()
+            w.setMinimumHeight(60)
+            w.setPlainText(value or "")
+            return w
+        w = QLineEdit()
+        w.setText(value or "")
+        return w
+
+    def _collect_custom_values(self) -> dict[int, str]:
+        out = {}
+        for fid, w in self._custom_widgets.items():
+            if isinstance(w, QCheckBox):
+                out[fid] = "1" if w.isChecked() else ""
+            elif isinstance(w, QComboBox):
+                out[fid] = w.currentText()
+            elif isinstance(w, QTextEdit):
+                out[fid] = w.toPlainText()
+            else:
+                out[fid] = w.text()
+        return out
 
     def values(self):
         d = {k: (w.toPlainText() if isinstance(w, QTextEdit) else w.text())
              for k, w in self.inp.items()}
         d["status"] = self.status.currentText()
         d["address"] = self.address.text().strip()
+        d["_custom_fields"] = self._collect_custom_values()
         return d
 
 
@@ -180,7 +238,8 @@ class FollowUpDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Nachfassaktion anlegen")
         form = QFormLayout(self)
-        self.title, self.description, self.due = QLineEdit(), QTextEdit(), QLineEdit()
+        self.title, self.description, self.due = (
+            QLineEdit(), QTextEdit(), QLineEdit())
         self.due.setPlaceholderText("YYYY-MM-DD (optional)")
         self.priority = QComboBox()
         self.priority.addItem("Normal", "normal")
@@ -199,9 +258,6 @@ class FollowUpDialog(QDialog):
 
 # ======================================================================
 # Detail-Widget – 2-Spalten-Layout
-#   LINKS:  Visitenkarte + Firmendaten + Notizen
-#   RECHTS: Tabs (Aufträge & Nachrichten, Kontaktwege & Adressen,
-#                  Firma & Ansprechpartner) + Aktionen unten
 # ======================================================================
 class ContactDetailWidget(QWidget):
     def __init__(self, page):
@@ -210,6 +266,7 @@ class ContactDetailWidget(QWidget):
         self.ctx = page.ctx
         self.current_contact = None
         self._orig_pix = None
+        self._cf_box = None
 
         main_h = QHBoxLayout(self)
         main_h.setContentsMargins(0, 0, 0, 0)
@@ -220,13 +277,13 @@ class ContactDetailWidget(QWidget):
         lv = QVBoxLayout(left_content)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(8)
+        self._left_layout = lv
 
         self.title = QLabel("Ansprechpartner")
         self.title.setObjectName("Title")
         self.title.setWordWrap(True)
         lv.addWidget(self.title)
 
-        # Visitenkarte oben links
         self.image_label = QLabel("Keine Visitenkarte")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMinimumHeight(180)
@@ -245,7 +302,6 @@ class ContactDetailWidget(QWidget):
         self.image_hint.setAlignment(Qt.AlignCenter)
         lv.addWidget(self.image_hint)
 
-        # Firmen-/Kontaktdaten
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         form.setContentsMargins(0, 6, 0, 6)
@@ -256,6 +312,7 @@ class ContactDetailWidget(QWidget):
             ("position", "Position"),
             ("phone", "Telefon"),
             ("email", "E-Mail"),
+            ("website", "Webseite"),
             ("status", "Status"),
             ("source", "Quelle"),
             ("employee", "Erfasst von"),
@@ -302,7 +359,6 @@ class ContactDetailWidget(QWidget):
         self.tasks = QListWidget()
         self.history = QListWidget()
 
-        # Tab 1: Aufträge & Nachrichten
         activity_tab = QWidget()
         activity_layout = QVBoxLayout(activity_tab)
         activity_layout.addWidget(QLabel(
@@ -311,7 +367,6 @@ class ContactDetailWidget(QWidget):
         activity_layout.addWidget(QLabel("Historie / Nachrichten"))
         activity_layout.addWidget(self.history, 1)
 
-        # Tab 2: Kontaktwege & Adressen
         contact_tab = QWidget()
         cv = QVBoxLayout(contact_tab)
         cv.addWidget(QLabel(
@@ -340,7 +395,6 @@ class ContactDetailWidget(QWidget):
         address_actions.addStretch(1)
         cv.addLayout(address_actions)
 
-        # Tab 3: Firma & Ansprechpartner
         company_tab = QWidget()
         company_layout = QVBoxLayout(company_tab)
 
@@ -366,7 +420,6 @@ class ContactDetailWidget(QWidget):
         self.tabs.addTab(company_tab, "Firma & Ansprechpartner")
         rv.addWidget(self.tabs, 1)
 
-        # Aktionen
         btn_row = QHBoxLayout()
         self.btn_edit = QPushButton("Bearbeiten")
         self.btn_edit.clicked.connect(self.page.edit)
@@ -388,7 +441,6 @@ class ContactDetailWidget(QWidget):
         self.company_people.itemDoubleClicked.connect(
             self.page.open_company_contact)
 
-    # ------------------------------------------------------------------
     def _set_buttons_enabled(self, enabled):
         self.btn_edit.setEnabled(enabled)
         self.btn_delete.setEnabled(enabled)
@@ -399,9 +451,20 @@ class ContactDetailWidget(QWidget):
         self.btn_del_address.setEnabled(enabled)
         self.btn_company_contact.setEnabled(enabled)
 
+    def _remove_custom_box(self):
+        if self._cf_box is not None:
+            try:
+                self._left_layout.removeWidget(self._cf_box)
+                self._cf_box.setParent(None)
+                self._cf_box.deleteLater()
+            except Exception:
+                pass
+            self._cf_box = None
+
     def set_contact(self, contact):
         self.current_contact = contact
         self._orig_pix = None
+        self._remove_custom_box()
 
         if not contact:
             self.title.setText("Ansprechpartner")
@@ -432,6 +495,8 @@ class ContactDetailWidget(QWidget):
         self.fields["position"].setText(contact.get("position") or "—")
         self.fields["phone"].setText(contact.get("phone") or "—")
         self.fields["email"].setText(contact.get("email") or "—")
+        self.fields["website"].setText(
+            get_contact_website(self.ctx.db, contact) or "—")
         self.fields["status"].setText(contact.get("status") or "—")
         self.fields["source"].setText(contact.get("source") or "—")
         self.fields["employee"].setText(
@@ -441,13 +506,37 @@ class ContactDetailWidget(QWidget):
         self.fields["created_at"].setText(
             _fmt_dt(contact.get("created_at", "")) or "—")
 
-        # Firmenadresse (bevorzugt) oder Kontaktadresse
         addr = _best_address_for_contact(self.ctx, contact)
         self.fields["address"].setText(addr or "—")
 
         self.notes_view.setPlainText(contact.get("notes") or "")
 
-        # Kontaktwege
+        # Eigene Felder anzeigen
+        try:
+            field_defs = cf.list_fields(
+                self.ctx.db,
+                fair_id=contact.get("fair_id"),
+                entity_type="contact", active_only=True)
+            values = cf.get_values(
+                self.ctx.db, contact_id=contact["id"])
+        except Exception:
+            field_defs, values = [], {}
+        if field_defs:
+            box = QGroupBox("Eigene Felder")
+            fl = QFormLayout(box)
+            for f in field_defs:
+                v = values.get(f["id"], "") or "—"
+                if f["field_type"] == "checkbox":
+                    v = ("Ja" if values.get(f["id"]) in ("1", "true", "Ja")
+                         else "Nein")
+                lbl = QLabel(str(v))
+                lbl.setWordWrap(True)
+                lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                fl.addRow(f["label"] + ":", lbl)
+            self._left_layout.insertWidget(
+                self._left_layout.count() - 1, box)
+            self._cf_box = box
+
         self.channels.clear()
         for channel in self.ctx.db.list_contact_channels(contact["id"]):
             item = QListWidgetItem(
@@ -457,7 +546,6 @@ class ContactDetailWidget(QWidget):
             item.setData(Qt.UserRole, channel["id"])
             self.channels.addItem(item)
 
-        # Zusätzliche Adressen am Kontakt
         contact_addresses = self.ctx.db.list_contact_addresses(contact["id"])
         self.addresses.clear()
         for address in contact_addresses:
@@ -474,7 +562,6 @@ class ContactDetailWidget(QWidget):
             item.setData(Qt.UserRole, address["id"])
             self.addresses.addItem(item)
 
-        # Firma & Ansprechpartner
         if contact.get("company_id"):
             company = None
             try:
@@ -510,7 +597,6 @@ class ContactDetailWidget(QWidget):
             self.company_people.clear()
             self.company_people.addItem("Keine Firma zugeordnet.")
 
-        # Aufgaben / Historie
         self.tasks.clear()
         for task in self.ctx.db.list_tasks(contact_id=contact["id"]):
             item = QListWidgetItem(
@@ -530,7 +616,6 @@ class ContactDetailWidget(QWidget):
         self._load_image(contact.get("card_image_path"))
         self._set_buttons_enabled(True)
 
-    # ---------- Bild ----------
     def _load_image(self, path):
         if not path or not os.path.exists(path):
             self.image_label.setPixmap(QPixmap())
@@ -579,7 +664,7 @@ class ContactDetailWidget(QWidget):
 
 
 # ======================================================================
-# Hauptseite – nur noch Tabelle (volle Breite)
+# Hauptseite
 # ======================================================================
 class ContactsPage(QWidget):
     def __init__(self, ctx, main):
@@ -604,7 +689,7 @@ class ContactsPage(QWidget):
 
         f = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Suche Name / Firma / E-Mail")
+        self.search.setPlaceholderText("Suche Name / Firma / E-Mail / Webseite")
         self.search.textChanged.connect(self.refresh)
         self.status_filter = QComboBox()
         self.status_filter.currentIndexChanged.connect(self.refresh)
@@ -629,9 +714,19 @@ class ContactsPage(QWidget):
         self.table.itemDoubleClicked.connect(self.open_full_profile)
         v.addWidget(self.table, 1)
 
-    # ---------- Helfer ----------
+        act = QHBoxLayout()
+        self.btn_merge = QPushButton("Mit anderem Kontakt zusammenführen…")
+        self.btn_merge.setObjectName("Ghost")
+        self.btn_merge.clicked.connect(self.merge_selected)
+        self.btn_company = QPushButton("Firmenakte öffnen")
+        self.btn_company.setObjectName("Ghost")
+        self.btn_company.clicked.connect(self.open_company)
+        act.addWidget(self.btn_merge)
+        act.addWidget(self.btn_company)
+        act.addStretch(1)
+        v.addLayout(act)
+
     def _current_employee_id(self):
-        """Liefert die employees.id des angemeldeten Benutzers."""
         user = getattr(self.main, "user", None)
         if not user:
             return None
@@ -652,7 +747,6 @@ class ContactsPage(QWidget):
         self.status_filter.setCurrentIndex(idx if idx >= 0 else 0)
         self.status_filter.blockSignals(False)
 
-    # ---------- Refresh ----------
     def refresh(self):
         self._rebuild_status_filter()
 
@@ -687,7 +781,6 @@ class ContactsPage(QWidget):
             return
         profile.refresh_from_db()
 
-    # ---------- Profil öffnen ----------
     def open_full_profile(self, _item=None):
         cid = self._selected_contact_id()
         contact = self.ctx.db.get_contact(cid) if cid else None
@@ -695,7 +788,6 @@ class ContactsPage(QWidget):
             return
         self.main.open_contact_profile(contact)
 
-    # ---------- Aktionen ----------
     def _selected_contact_id(self):
         row = self.table.currentRow()
         if row < 0:
@@ -724,8 +816,9 @@ class ContactsPage(QWidget):
 
         vals = d.values()
         address = vals.pop("address", "")
+        website = vals.pop("website", "").strip()
+        cf_vals = vals.pop("_custom_fields", None) or {}
 
-        # FIX: Mitarbeiter, der den Kontakt erfasst, wieder mitschicken
         employee_id = self._current_employee_id()
 
         new_id = self.ctx.db.create_contact(
@@ -735,14 +828,55 @@ class ContactsPage(QWidget):
             employee_id=employee_id,
             **vals)
 
-        # Adresse gehört zur Firma (Fallback: Kontakt, falls keine Firma)
-        if address:
-            contact = self.ctx.db.get_contact(new_id)
-            company_id = contact.get("company_id") if contact else None
-            if company_id:
-                self.ctx.db.set_company_address(company_id, address)
+        # Adresse + Webseite an Firma bzw. Kontakt speichern
+        try:
+            set_contact_extras(
+                self.ctx.db, new_id, address=address, website=website)
+        except Exception:
+            pass
+
+        # Eigene Felder
+        if cf_vals:
+            field_defs = cf.list_fields(
+                self.ctx.db, fair_id=self.ctx.current_fair_id,
+                entity_type="contact", active_only=True)
+            errors = cf.validate_values(field_defs, cf_vals)
+            if errors:
+                QMessageBox.warning(
+                    self, "Eigene Felder",
+                    "Bitte korrigieren:\n\n" + "\n".join(errors))
             else:
-                self.ctx.db.add_contact_address(new_id, street=address)
+                cf.set_values(self.ctx.db, cf_vals, contact_id=new_id)
+
+        # Dubletten-Prüfung
+        fresh = self.ctx.db.get_contact(new_id)
+        similar = find_similar_contacts(self.ctx.db, fresh) if fresh else []
+        if similar:
+            top, reasons, _score = similar[0]
+            if QMessageBox.question(
+                    self, "Mögliche Dublette",
+                    f"Der neue Kontakt ähnelt #{top['id']} "
+                    f"„{top.get('name') or '?'}“ "
+                    f"({top.get('company') or 'ohne Firma'}) "
+                    f"[{', '.join(sorted(reasons))}].\n\n"
+                    f"Jetzt zusammenführen?",
+                    QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+                MergeContactDialog(self, self.ctx.db, fresh, top).exec_()
+                self.refresh()
+                keep_id = fresh["id"] if self.ctx.db.get_contact(fresh["id"]) \
+                    else top["id"]
+                self._select_contact_by_id(keep_id)
+                return
+
+        company_hints = (
+            company_similarity_warning(self.ctx.db, fresh) if fresh else [])
+        if company_hints:
+            QMessageBox.information(
+                self, "Firmen-Ähnlichkeit",
+                "Es existiert bereits ein Unternehmen mit ähnlichem "
+                "Namen:\n"
+                f"„{company_hints[0]['name']}“ "
+                f"(Ähnlichkeit {int(company_hints[0]['similarity']*100)}%).")
 
         self.refresh()
         self._select_contact_by_id(new_id)
@@ -766,16 +900,27 @@ class ContactsPage(QWidget):
 
         vals = d.values()
         address = vals.pop("address", "")
+        website = vals.pop("website", "").strip()
+        cf_vals = vals.pop("_custom_fields", None) or {}
         self.ctx.db.update_contact(cid, **vals)
 
-        # Nach dem Update frisch laden (company_id könnte neu sein)
-        updated = self.ctx.db.get_contact(cid)
-        company_id = updated.get("company_id") if updated else None
-        if company_id:
-            # Adresse immer an der Firma spiegeln (auch leeren)
-            self.ctx.db.set_company_address(company_id, address)
-        elif address:
-            self.ctx.db.add_contact_address(cid, street=address)
+        try:
+            set_contact_extras(
+                self.ctx.db, cid, address=address, website=website)
+        except Exception:
+            pass
+
+        if cf_vals:
+            field_defs = cf.list_fields(
+                self.ctx.db, fair_id=self.ctx.current_fair_id,
+                entity_type="contact", active_only=True)
+            errors = cf.validate_values(field_defs, cf_vals)
+            if errors:
+                QMessageBox.warning(
+                    self, "Eigene Felder",
+                    "Bitte korrigieren:\n\n" + "\n".join(errors))
+            else:
+                cf.set_values(self.ctx.db, cf_vals, contact_id=cid)
 
         self.refresh()
         self._select_contact_by_id(cid)
@@ -912,3 +1057,50 @@ class ContactsPage(QWidget):
                 status=("open" if item.data(Qt.UserRole + 1) == "done"
                         else "done"))
             self._sync_profile()
+
+    def merge_selected(self):
+        cid = self._selected_contact_id()
+        if cid is None:
+            QMessageBox.information(
+                self, "Auswahl",
+                "Bitte zuerst einen Kontakt auswählen – er ist der "
+                "„Behalten“-Datensatz.")
+            return
+        keep = self.ctx.db.get_contact(cid)
+        if not keep:
+            return
+        matches = find_similar_contacts(self.ctx.db, keep)
+        if not matches:
+            other_ids = [int(self.table.item(r, 0).text())
+                         for r in range(self.table.rowCount())
+                         if self.table.item(r, 0).text() != str(cid)]
+            if not other_ids:
+                QMessageBox.information(
+                    self, "Keine Kandidaten",
+                    "Es gibt keinen zweiten Kontakt zum Zusammenführen.")
+                return
+            other = self.ctx.db.get_contact(other_ids[0])
+            if not other:
+                return
+            MergeContactDialog(self, self.ctx.db, keep, other).exec_()
+            self.refresh()
+            return
+
+        top, _reasons, _score = matches[0]
+        if not MergeContactDialog(self, self.ctx.db, keep, top).exec_():
+            return
+        self.refresh()
+        if self.ctx.db.get_contact(keep["id"]):
+            self._select_contact_by_id(keep["id"])
+
+    def open_company(self):
+        cid = self._selected_contact_id()
+        if cid is None:
+            return
+        contact = self.ctx.db.get_contact(cid)
+        if not contact or not contact.get("company_id"):
+            QMessageBox.information(
+                self, "Keine Firma",
+                "Der Kontakt ist keiner Firma zugeordnet.")
+            return
+        self.main.open_company_profile(contact["company_id"])
