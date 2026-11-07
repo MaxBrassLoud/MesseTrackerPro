@@ -5,3 +5,4 @@ Pillow>=9.0
 pytesseract>=0.3.10
 pytest>=7.0
 matplotlib>=3.6
+cryptography>=41.0

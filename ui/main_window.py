@@ -21,7 +21,7 @@ from ui.pages.reports import ReportsPage
 from ui.pages.settings import SettingsPage
 from ui.pages.users import UsersPage
 from core.permissions import Perm
-
+from ui.pages.employees import EmployeesPage
 
 class AppContext:
     def __init__(self, db):
@@ -95,6 +95,8 @@ class MainWindow(QMainWindow):
              lambda: QueuePage(self.ctx, self)),
             ("merch",     "Merch",               Perm.MANAGE_MERCH,
              lambda: MerchPage(self.ctx, self)),
+            ("employees", "Mitarbeiter",         Perm.VIEW_DATA,
+             lambda: EmployeesPage(self.ctx, self)),
             ("reports",   "Auswertung & Export", Perm.VIEW_DATA,
              lambda: ReportsPage(self.ctx, self)),
             ("users",     "Benutzer",            Perm.MANAGE_USERS,

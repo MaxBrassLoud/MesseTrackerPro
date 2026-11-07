@@ -14,10 +14,11 @@ from core.backup import (
 )
 from ui.themes import THEMES
 from config import (
-    WEB_PORT, DEFAULT_AUTO_LOGOUT_MINUTES,
+    DEFAULT_AUTO_LOGOUT_MINUTES,
     AUTO_LOGOUT_MIN, AUTO_LOGOUT_MAX,
+    SSL_CERT_FILE, SSL_KEY_FILE,
 )
-from core.net import local_ip
+from core.net import web_url, web_scheme
 import os
 import subprocess
 import sys
@@ -26,7 +27,8 @@ import sys
 class StatusDialog(QDialog):
     def __init__(self, parent, status=None):
         super().__init__(parent)
-        self.setWindowTitle("Status bearbeiten" if status else "Status anlegen")
+        self.setWindowTitle(
+            "Status bearbeiten" if status else "Status anlegen")
         self.setMinimumWidth(360)
         form = QFormLayout(self)
         self.inp_name = QLineEdit(status["name"] if status else "")
@@ -47,10 +49,12 @@ class StatusDialog(QDialog):
         form.addRow("Sortierung", self.inp_order)
 
         self.cb_active = QCheckBox("Aktiv")
-        self.cb_active.setChecked(bool(status["active"]) if status else True)
+        self.cb_active.setChecked(
+            bool(status["active"]) if status else True)
         form.addRow(self.cb_active)
 
-        bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        bb = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         form.addRow(bb)
@@ -63,7 +67,8 @@ class StatusDialog(QDialog):
         self.color_btn.setText(self.color_value)
 
     def pick_color(self):
-        c = QColorDialog.getColor(QColor(self.color_value), self, "Farbe wählen")
+        c = QColorDialog.getColor(
+            QColor(self.color_value), self, "Farbe wählen")
         if c.isValid():
             self.color_value = c.name()
             self._update_color_button()
@@ -157,8 +162,9 @@ class SettingsPage(QWidget):
         srow.addStretch(1)
         sv.addLayout(srow)
         sv.addWidget(QLabel(
-            "Beim Umbenennen werden bestehende Kontakte automatisch mit aktualisiert. "
-            "Löschen ist nur möglich, wenn kein Kontakt den Status verwendet."))
+            "Beim Umbenennen werden bestehende Kontakte automatisch mit "
+            "aktualisiert. Löschen ist nur möglich, wenn kein Kontakt den "
+            "Status verwendet."))
         v.addWidget(status_box)
 
         # ---- Eigene Felder ----
@@ -169,6 +175,10 @@ class SettingsPage(QWidget):
         svv = QVBoxLayout(server_box)
         self.server_label = QLabel("")
         self.server_label.setObjectName("Sub")
+        self.server_label.setWordWrap(True)
+        self.server_label.setTextInteractionFlags(
+            self.server_label.textInteractionFlags()
+            | 0x0001)  # TextSelectableByMouse
         svv.addWidget(self.server_label)
         v.addWidget(server_box)
 
@@ -195,7 +205,25 @@ class SettingsPage(QWidget):
         idx = self.theme_combo.findText(current)
         if idx >= 0:
             self.theme_combo.setCurrentIndex(idx)
-        self.server_label.setText(f"http://{local_ip()}:{WEB_PORT}")
+
+        # Server-URL inkl. HTTPS-Status anzeigen
+        scheme = web_scheme()
+        url = web_url()
+        if scheme == "https":
+            cert_exists = (SSL_CERT_FILE and SSL_KEY_FILE
+                           and os.path.exists(SSL_CERT_FILE)
+                           and os.path.exists(SSL_KEY_FILE))
+            extra = ("🔒 HTTPS aktiv – Zertifikatswarnung beim ersten "
+                     "Aufruf einmal akzeptieren."
+                     if cert_exists else
+                     "🔒 HTTPS aktiv (Zertifikat wird beim nächsten "
+                     "Start erzeugt).")
+            self.server_label.setText(f"{url}\n{extra}")
+        else:
+            self.server_label.setText(
+                f"{url}\n"
+                "⚠️ Nur HTTP – PWA-Installation auf Smartphone nicht "
+                "möglich. Zertifikat konnte nicht erzeugt werden.")
 
         try:
             cur_auto = int(self.ctx.db.get_setting(
@@ -215,15 +243,18 @@ class SettingsPage(QWidget):
         rows = self.ctx.db.list_statuses(active_only=False)
         self.status_table.setRowCount(len(rows))
         for r, s in enumerate(rows):
-            self.status_table.setItem(r, 0, QTableWidgetItem(str(s["id"])))
-            self.status_table.setItem(r, 1, QTableWidgetItem(s["name"]))
+            self.status_table.setItem(
+                r, 0, QTableWidgetItem(str(s["id"])))
+            self.status_table.setItem(
+                r, 1, QTableWidgetItem(s["name"]))
             color_item = QTableWidgetItem(s["color"])
             color_item.setBackground(QColor(s["color"]))
             c = QColor(s["color"])
             color_item.setForeground(
                 QColor("#000") if c.lightness() > 128 else QColor("#fff"))
             self.status_table.setItem(r, 2, color_item)
-            self.status_table.setItem(r, 3, QTableWidgetItem(str(s["sort_order"])))
+            self.status_table.setItem(
+                r, 3, QTableWidgetItem(str(s["sort_order"])))
             self.status_table.setItem(
                 r, 4, QTableWidgetItem("Ja" if s["active"] else "Nein"))
 
@@ -233,8 +264,8 @@ class SettingsPage(QWidget):
         self.main.apply_theme()
         QMessageBox.information(
             self, "Theme",
-            f"Theme „{name}“ angewendet. Das Web-Theme wird mit dem nächsten "
-            "Seitenaufruf aktiv.")
+            f"Theme „{name}“ angewendet. Das Web-Theme wird mit dem "
+            "nächsten Seitenaufruf aktiv.")
 
     def _save_auto_logout(self):
         val = self.auto_logout_spin.value()
@@ -267,7 +298,8 @@ class SettingsPage(QWidget):
             return
         vals = d.values()
         if not vals["name"]:
-            QMessageBox.warning(self, "Fehlt", "Name darf nicht leer sein.")
+            QMessageBox.warning(
+                self, "Fehlt", "Name darf nicht leer sein.")
             return
         try:
             self.ctx.db.create_status(
@@ -303,7 +335,8 @@ class SettingsPage(QWidget):
         s = self._selected_status()
         if not s:
             return
-        self.ctx.db.update_status(s["id"], active=0 if s["active"] else 1)
+        self.ctx.db.update_status(
+            s["id"], active=0 if s["active"] else 1)
         self._load_statuses()
         self._refresh_related_pages()
 
@@ -354,7 +387,8 @@ class SettingsPage(QWidget):
         self.cf_scope.addItem("Gilt für alle Messen", None)
         for fair in self.ctx.db.list_fairs(include_archived=False):
             self.cf_scope.addItem(f"Messe: {fair['name']}", fair["id"])
-        self.cf_scope.currentIndexChanged.connect(self._load_custom_fields)
+        self.cf_scope.currentIndexChanged.connect(
+            self._load_custom_fields)
         bv.addWidget(self.cf_scope)
 
         self.cf_table = QTableWidget(0, 6)
@@ -382,7 +416,8 @@ class SettingsPage(QWidget):
 
     def _load_custom_fields(self):
         from core import custom_fields as cf
-        fair_id = self.cf_scope.currentData() if hasattr(self, "cf_scope") else None
+        fair_id = (self.cf_scope.currentData()
+                   if hasattr(self, "cf_scope") else None)
         try:
             fields = cf.list_fields(
                 self.ctx.db, fair_id=fair_id,
@@ -391,12 +426,16 @@ class SettingsPage(QWidget):
             fields = []
         self.cf_table.setRowCount(len(fields))
         for r, f in enumerate(fields):
-            self.cf_table.setItem(r, 0, QTableWidgetItem(str(f["id"])))
-            self.cf_table.setItem(r, 1, QTableWidgetItem(f["label"]))
-            self.cf_table.setItem(r, 2, QTableWidgetItem(f["field_type"]))
+            self.cf_table.setItem(
+                r, 0, QTableWidgetItem(str(f["id"])))
+            self.cf_table.setItem(
+                r, 1, QTableWidgetItem(f["label"]))
+            self.cf_table.setItem(
+                r, 2, QTableWidgetItem(f["field_type"]))
             self.cf_table.setItem(
                 r, 3, QTableWidgetItem("Ja" if f["required"] else "Nein"))
-            self.cf_table.setItem(r, 4, QTableWidgetItem(str(f["sort_order"])))
+            self.cf_table.setItem(
+                r, 4, QTableWidgetItem(str(f["sort_order"])))
             self.cf_table.setItem(
                 r, 5, QTableWidgetItem("Ja" if f["active"] else "Nein"))
 
@@ -413,7 +452,8 @@ class SettingsPage(QWidget):
         inp_type = QComboBox()
         for key, label in (("text", "Text"), ("number", "Zahl"),
                            ("date", "Datum"), ("select", "Auswahl"),
-                           ("checkbox", "Ja/Nein"), ("multiline", "Mehrzeilig")):
+                           ("checkbox", "Ja/Nein"),
+                           ("multiline", "Mehrzeilig")):
             inp_type.addItem(label, key)
         inp_required = QCheckBox("Pflichtfeld")
         inp_order = QSpinBox()
@@ -427,7 +467,8 @@ class SettingsPage(QWidget):
         form.addRow("Optionen:", inp_options)
         form.addRow("Pflichtfeld:", inp_required)
         form.addRow("Sortierung:", inp_order)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
@@ -482,7 +523,8 @@ class SettingsPage(QWidget):
         form.addRow("Pflichtfeld:", inp_required)
         form.addRow("Sortierung:", inp_order)
         form.addRow("Aktiv:", inp_active)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         bb.accepted.connect(dlg.accept)
         bb.rejected.connect(dlg.reject)
         form.addRow(bb)
@@ -512,12 +554,14 @@ class SettingsPage(QWidget):
     # ---- Backup ----
     def backup(self):
         path, _ = QFileDialog.getSaveFileName(
-            self, "Backup speichern", "messe_tracker_backup.zip", "ZIP (*.zip)")
+            self, "Backup speichern", "messe_tracker_backup.zip",
+            "ZIP (*.zip)")
         if not path:
             return
         try:
             create_backup(path)
-            QMessageBox.information(self, "Backup", f"Backup erstellt:\n{path}")
+            QMessageBox.information(
+                self, "Backup", f"Backup erstellt:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Fehler", str(e))
 
@@ -554,8 +598,8 @@ class SettingsPage(QWidget):
 
         QMessageBox.information(
             self, "Vorbereitet",
-            "Die Wiederherstellung wird beim nächsten Start durchgeführt.\n\n"
-            "Die Anwendung wird jetzt beendet.")
+            "Die Wiederherstellung wird beim nächsten Start "
+            "durchgeführt.\n\nDie Anwendung wird jetzt beendet.")
         QApplication.quit()
 
     def open_dir(self):

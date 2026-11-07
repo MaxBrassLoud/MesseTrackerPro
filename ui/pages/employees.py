@@ -8,7 +8,7 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 
 from config import WEB_PORT
-from core.net import local_ip          # FIX #10: zentral statt lokale Kopie
+from core.net import web_url
 
 try:
     import qrcode
@@ -87,7 +87,9 @@ class QRDialog(QDialog):
         info = QLabel(
             "Smartphone und Laptop müssen im selben WLAN sein. Beim ersten "
             f"Start ggf. die Firewall-Freigabe für Python/Port {WEB_PORT} "
-            "bestätigen.")
+            "bestätigen.\n\n"
+            "Bei HTTPS-Warnung im Browser: einmalig „Erweitert → Trotzdem "
+            "fortfahren“ oder das Zertifikat unter /cert.crt installieren.")
         info.setStyleSheet("color:#888;font-size:9pt;")
         info.setWordWrap(True)
         v.addWidget(info)
@@ -238,7 +240,7 @@ class EmployeesPage(QWidget):
         self.show_qr_for_token(emp["token"], emp["name"])
 
     def show_qr_for_token(self, token, name):
-        url = f"http://{local_ip()}:{WEB_PORT}/scan/{token}"
+        url = f"{web_url()}/scan/{token}"
         ad = self.ctx.db.get_active_fair_day()
 
         warnings = []

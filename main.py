@@ -7,14 +7,18 @@ from logging.handlers import RotatingFileHandler
 
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
-from config import DB_PATH, WEB_PORT, DATA_DIR, BACKUP_DIR
+from config import (
+    DB_PATH, WEB_PORT, DATA_DIR, BACKUP_DIR,
+    SSL_CERT_FILE, SSL_KEY_FILE, SSL_AUTO_GENERATE, SSL_VALID_DAYS,
+)
 from database.db import Database
 from web.server import start_server
 from ui.main_window import MainWindow
 from core.backup import (
     create_backup, apply_pending_restore, BackupError
 )
-from core.net import local_ip
+from core.net import local_ip, web_scheme
+from core.ssl_cert import ensure_ssl_certificate
 
 LOG_PATH = DATA_DIR / "messe_tracker.log"
 
@@ -33,6 +37,20 @@ def _setup_logging():
     console = logging.StreamHandler()
     console.setFormatter(formatter)
     logger.addHandler(console)
+
+
+def _ensure_ssl_or_warn():
+    """Erzeugt bei Bedarf ein SSL-Zertifikat für den Webserver."""
+    if not SSL_AUTO_GENERATE:
+        logging.info("SSL-Auto-Generierung ist deaktiviert (MT_SSL_AUTO=0).")
+        return
+    try:
+        ensure_ssl_certificate(SSL_CERT_FILE, SSL_KEY_FILE, SSL_VALID_DAYS)
+    except Exception as e:
+        logging.exception("SSL-Zertifikat konnte nicht erzeugt werden: %s", e)
+        logging.warning(
+            "Webserver läuft ohne HTTPS. PWA-Installation und "
+            "Kamerazugriff auf Smartphones funktionieren dann nicht.")
 
 
 def _auto_backup(db):
@@ -75,9 +93,12 @@ def main():
     _setup_logging()
     sys.excepthook = _excepthook
 
+    # 1. SSL-Zertifikat sicherstellen (vor Webserver-Start)
+    _ensure_ssl_or_warn()
+
     app = QApplication(sys.argv)
 
-    # 1. Pending Restore vor dem Öffnen der DB
+    # 2. Pending Restore vor dem Öffnen der DB
     try:
         if apply_pending_restore():
             QMessageBox.information(
@@ -92,22 +113,20 @@ def main():
             f"Die vorhandene Datenbank wurde beibehalten. Die ZIP-Datei "
             f"bleibt liegen und wird beim nächsten Start erneut versucht.")
 
-    # 2. DB öffnen & migrieren
+    # 3. DB öffnen & migrieren
     db = Database(str(DB_PATH))
     db.init_db()
 
     _auto_backup(db)
 
-    # Der QR-/Upload-Webserver ist bewusst unabhängig von der Desktop-Sitzung:
-    # Mitarbeitende müssen während eines Anmelde- oder Benutzerwechsels weiter
-    # Visitenkarten und Kontakte erfassen können.
+    # Der QR-/Upload-Webserver ist bewusst unabhängig von der Desktop-Sitzung.
     start_server(db)
 
-    # 3. Auth-Service
+    # 4. Auth-Service
     from core.auth import AuthService, AuthError
     auth = AuthService(db)
 
-    # 4. Setup-Wizard ODER Login
+    # 5. Setup-Wizard ODER Login
     user = None
     session_token = None
     if auth.is_setup_required():
@@ -134,16 +153,20 @@ def main():
             sys.exit(0)
         user, session_token = dlg.user, dlg.session_token
 
-    # 5. Desktop-Sitzung ist erfolgreich angemeldet.
+    # 6. Desktop-Sitzung erfolgreich angemeldet.
+    scheme = web_scheme()
     print("[Messe Tracker Pro]")
-    print(f"  Lokaler Webserver: http://{local_ip()}:{WEB_PORT}")
+    print(f"  Lokaler Webserver: {scheme}://{local_ip()}:{WEB_PORT}")
+    if scheme == "https":
+        print(f"  Zertifikat:        {SSL_CERT_FILE}")
+        print(f"  → Beim ersten Aufruf Warnung einmal akzeptieren.")
     print(f"  Datenbank:         {DB_PATH}")
     print(f"  Logfile:           {LOG_PATH}")
     print(f"  Angemeldet als:    {user['username']}"
           f"{' (Admin)' if user.get('is_admin') else ''}")
     print()
 
-    # 6. Hauptfenster; Exit-Code 42 bedeutet Benutzerwechsel, nicht Programmende.
+    # 7. Hauptfenster; Exit-Code 42 bedeutet Benutzerwechsel.
     w = None
     last_code = 0
     while True:
@@ -154,12 +177,9 @@ def main():
         if last_code != 42:
             break
 
-        # Benutzerwechsel wurde innerhalb von MainWindow._do_logout()
-        # vorbereitet: neue Credentials stehen in _pending_user/_pending_token.
         new_user = getattr(w, "_pending_user", None)
         new_token = getattr(w, "_pending_token", None)
 
-        # Altes Fenster sauber abbauen
         try:
             w.hide()
             w.close()
@@ -168,14 +188,11 @@ def main():
             logging.exception("Altes MainWindow konnte nicht abgebaut werden.")
 
         if not new_user:
-            # Abbruch der Neuanmeldung → Programm beenden
             last_code = 0
             break
 
         user, session_token = new_user, new_token
-        # Neue Iteration baut ein frisches MainWindow mit dem neuen Benutzer
 
-    # Beim Beenden: aktuelle Session revoken
     try:
         auth.logout(session_token)
     except Exception:

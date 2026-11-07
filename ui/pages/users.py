@@ -8,8 +8,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QSizePolicy, QGraphicsBlurEffect)
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
-from config import WEB_PORT
-from core.net import local_ip
+
+from core.net import web_url
 from core.auth import AuthService, AuthError
 from core.permissions import Perm, PermissionDenied
 from core.permissions import ALL_PERMISSIONS, PERMISSION_LABELS
@@ -27,16 +27,22 @@ class RoleDialog(QDialog):
         form = QFormLayout(self)
         self.name = QLineEdit(role.get("name", "") if role else "")
         self.description = QLineEdit(role.get("description", "") if role else "")
-        form.addRow("Name:", self.name); form.addRow("Beschreibung:", self.description)
+        form.addRow("Name:", self.name)
+        form.addRow("Beschreibung:", self.description)
         form.addRow(QLabel("Berechtigungen:"))
         self.permissions = {}
         for permission, label in ALL_PERMISSIONS:
-            check = QCheckBox(label); check.setChecked(permission in selected)
-            self.permissions[permission] = check; form.addRow(check)
-        buttons = QPushButton("Speichern"); buttons.clicked.connect(self.accept); form.addRow(buttons)
+            check = QCheckBox(label)
+            check.setChecked(permission in selected)
+            self.permissions[permission] = check
+            form.addRow(check)
+        buttons = QPushButton("Speichern")
+        buttons.clicked.connect(self.accept)
+        form.addRow(buttons)
 
     def selected_permissions(self):
-        return {key for key, check in self.permissions.items() if check.isChecked()}
+        return {key for key, check in self.permissions.items()
+                if check.isChecked()}
 
 
 class CreateUserDialog(QDialog):
@@ -47,7 +53,8 @@ class CreateUserDialog(QDialog):
         form = QFormLayout(self)
         self.inp_user = QLineEdit()
         self.inp_name = QLineEdit()
-        self.inp_pw = QLineEdit(); self.inp_pw.setEchoMode(QLineEdit.Password)
+        self.inp_pw = QLineEdit()
+        self.inp_pw.setEchoMode(QLineEdit.Password)
         self.cb_admin = QCheckBox("Administrator (alle Rechte)")
         form.addRow("Benutzername:", self.inp_user)
         form.addRow("Anzeigename:", self.inp_name)
@@ -109,25 +116,39 @@ class UsersPage(QWidget):
         self.detail_title = QLabel("Mitarbeiter auswählen")
         self.detail_title.setObjectName("Title")
         detail_layout.addWidget(self.detail_title)
-        self.detail_info = QLabel("Wählen Sie einen Mitarbeiter in der Tabelle aus.")
+        self.detail_info = QLabel(
+            "Wählen Sie einen Mitarbeiter in der Tabelle aus.")
         self.detail_info.setWordWrap(True)
         detail_layout.addWidget(self.detail_info)
         self.qr = QLabel("QR-Code wird nach Auswahl angezeigt")
-        self.qr.setAlignment(Qt.AlignCenter); self.qr.setMinimumSize(220, 220)
+        self.qr.setAlignment(Qt.AlignCenter)
+        self.qr.setMinimumSize(220, 220)
         self.qr.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.qr.setCursor(Qt.PointingHandCursor); self.qr.mousePressEvent = self._reveal_qr
+        self.qr.setCursor(Qt.PointingHandCursor)
+        self.qr.mousePressEvent = self._reveal_qr
         detail_layout.addWidget(self.qr)
-        self.qr_hint = QLabel("Zum Freigeben und Scannen auf den QR-Code klicken.")
-        self.qr_hint.setWordWrap(True); detail_layout.addWidget(self.qr_hint)
+        self.qr_hint = QLabel(
+            "Zum Freigeben und Scannen auf den QR-Code klicken.")
+        self.qr_hint.setWordWrap(True)
+        detail_layout.addWidget(self.qr_hint)
         self.detail_buttons = QHBoxLayout()
-        self.btn_active = QPushButton("Aktiv/Inaktiv") ; self.btn_active.clicked.connect(self.toggle_active)
-        self.btn_reset = QPushButton("Passwort zurücksetzen"); self.btn_reset.clicked.connect(self.reset_password)
-        self.btn_roles = QPushButton("Rollen"); self.btn_roles.clicked.connect(self.assign_roles)
-        for button in (self.btn_active, self.btn_reset, self.btn_roles): self.detail_buttons.addWidget(button)
-        detail_layout.addLayout(self.detail_buttons); detail_layout.addStretch(1)
-        split.addWidget(self.detail); split.setSizes([760, 380])
+        self.btn_active = QPushButton("Aktiv/Inaktiv")
+        self.btn_active.clicked.connect(self.toggle_active)
+        self.btn_reset = QPushButton("Passwort zurücksetzen")
+        self.btn_reset.clicked.connect(self.reset_password)
+        self.btn_roles = QPushButton("Rollen")
+        self.btn_roles.clicked.connect(self.assign_roles)
+        for button in (self.btn_active, self.btn_reset, self.btn_roles):
+            self.detail_buttons.addWidget(button)
+        detail_layout.addLayout(self.detail_buttons)
+        detail_layout.addStretch(1)
+        split.addWidget(self.detail)
+        split.setSizes([760, 380])
         v.addWidget(split, 1)
-        self._qr_blur = QGraphicsBlurEffect(self.qr); self._qr_blur.setBlurRadius(24); self.qr.setGraphicsEffect(self._qr_blur)
+
+        self._qr_blur = QGraphicsBlurEffect(self.qr)
+        self._qr_blur.setBlurRadius(24)
+        self.qr.setGraphicsEffect(self._qr_blur)
         self._qr_revealed = False
 
     def refresh(self):
@@ -141,13 +162,16 @@ class UsersPage(QWidget):
         for r, u in enumerate(users):
             self.table.setItem(r, 0, QTableWidgetItem(str(u["id"])))
             self.table.setItem(r, 1, QTableWidgetItem(u["username"]))
-            self.table.setItem(r, 2, QTableWidgetItem(u.get("display_name") or ""))
+            self.table.setItem(r, 2, QTableWidgetItem(
+                u.get("display_name") or ""))
             self.table.setItem(r, 3, QTableWidgetItem(
                 "Ja" if u.get("is_admin") else "Nein"))
             self.table.setItem(r, 4, QTableWidgetItem(
                 "Ja" if u.get("is_active") else "Nein"))
-            roles = [role["name"] for role in self.ctx.db.list_roles() if role["id"] in self.ctx.db.user_role_ids(u["id"])]
-            self.table.setItem(r, 5, QTableWidgetItem(", ".join(roles) or "—"))
+            roles = [role["name"] for role in self.ctx.db.list_roles()
+                     if role["id"] in self.ctx.db.user_role_ids(u["id"])]
+            self.table.setItem(r, 5, QTableWidgetItem(
+                ", ".join(roles) or "—"))
             self.table.setItem(r, 6, QTableWidgetItem(
                 u.get("last_login") or "—"))
         self._show_selected()
@@ -155,25 +179,47 @@ class UsersPage(QWidget):
     def _show_selected(self):
         uid = self._selected_id()
         if uid is None:
-            self.detail_title.setText("Mitarbeiter auswählen"); self.detail_info.setText("Wählen Sie einen Mitarbeiter in der Tabelle aus."); return
-        user = self.ctx.db.get_user(uid); employee = self.ctx.db.get_employee_by_user_id(uid)
-        roles = [role["name"] for role in self.ctx.db.list_roles() if role["id"] in self.ctx.db.user_role_ids(uid)]
-        self.detail_title.setText(user.get("display_name") or user["username"])
-        self.detail_info.setText(f"Benutzername: {user['username']}\nE-Mail: {user.get('email') or 'Keine Angabe'}\nStatus: {'Aktiv' if user.get('is_active') else 'Deaktiviert'}\nRollen: {', '.join(roles) or 'Keine'}")
+            self.detail_title.setText("Mitarbeiter auswählen")
+            self.detail_info.setText(
+                "Wählen Sie einen Mitarbeiter in der Tabelle aus.")
+            return
+        user = self.ctx.db.get_user(uid)
+        employee = self.ctx.db.get_employee_by_user_id(uid)
+        roles = [role["name"] for role in self.ctx.db.list_roles()
+                 if role["id"] in self.ctx.db.user_role_ids(uid)]
+        self.detail_title.setText(
+            user.get("display_name") or user["username"])
+        self.detail_info.setText(
+            f"Benutzername: {user['username']}\n"
+            f"E-Mail: {user.get('email') or 'Keine Angabe'}\n"
+            f"Status: {'Aktiv' if user.get('is_active') else 'Deaktiviert'}\n"
+            f"Rollen: {', '.join(roles) or 'Keine'}")
         self._qr_revealed = False
         if not employee or not qrcode:
-            self.qr.setText("QR-Code nicht verfügbar" if employee else "Kein Mitarbeiterprofil vorhanden")
+            self.qr.setText(
+                "QR-Code nicht verfügbar" if employee
+                else "Kein Mitarbeiterprofil vorhanden")
             return
-        image = qrcode.make(f"http://{local_ip()}:{WEB_PORT}/scan/{employee['token']}")
-        buf = io.BytesIO(); image.save(buf, format="PNG")
-        pix = QPixmap(); pix.loadFromData(buf.getvalue())
-        self.qr.setPixmap(pix.scaled(250, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        self._qr_blur.setEnabled(True); self.qr_hint.setText("QR-Code geschützt. Zum Freigeben und Scannen klicken.")
+        image = qrcode.make(
+            f"{web_url()}/scan/{employee['token']}")
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        pix = QPixmap()
+        pix.loadFromData(buf.getvalue())
+        self.qr.setPixmap(pix.scaled(
+            250, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self._qr_blur.setEnabled(True)
+        self.qr_hint.setText(
+            "QR-Code geschützt. Zum Freigeben und Scannen klicken.")
 
     def _reveal_qr(self, event):
-        if self.qr.pixmap() is None: return
-        self._qr_revealed = True; self._qr_blur.setEnabled(False)
-        self.qr_hint.setText("QR-Code freigegeben. Nach Auswahl eines anderen Mitarbeiters wird er wieder verdeckt.")
+        if self.qr.pixmap() is None:
+            return
+        self._qr_revealed = True
+        self._qr_blur.setEnabled(False)
+        self.qr_hint.setText(
+            "QR-Code freigegeben. Nach Auswahl eines anderen "
+            "Mitarbeiters wird er wieder verdeckt.")
 
     def _selected_id(self):
         row = self.table.currentRow()
@@ -263,32 +309,59 @@ class UsersPage(QWidget):
             "nächsten Anmeldung ändern.")
 
     def create_role(self):
-        try: self.auth.require(self.current_user, Perm.MANAGE_ROLES)
-        except PermissionDenied as e: QMessageBox.warning(self, "Keine Berechtigung", str(e)); return
-        dialog = RoleDialog(self)
-        if not dialog.exec_(): return
         try:
-            self.auth.create_role(dialog.name.text(), dialog.description.text(), dialog.selected_permissions(), self.current_user["id"])
+            self.auth.require(self.current_user, Perm.MANAGE_ROLES)
+        except PermissionDenied as e:
+            QMessageBox.warning(self, "Keine Berechtigung", str(e))
+            return
+        dialog = RoleDialog(self)
+        if not dialog.exec_():
+            return
+        try:
+            self.auth.create_role(
+                dialog.name.text(),
+                dialog.description.text(),
+                dialog.selected_permissions(),
+                self.current_user["id"])
         except (AuthError, ValueError) as exc:
             QMessageBox.warning(self, "Rolle", str(exc))
 
     def assign_roles(self):
         uid = self._selected_id()
-        if uid is None: QMessageBox.information(self, "Auswahl", "Bitte Benutzer auswählen."); return
-        try: self.auth.require(self.current_user, Perm.MANAGE_ROLES)
-        except PermissionDenied as e: QMessageBox.warning(self, "Keine Berechtigung", str(e)); return
+        if uid is None:
+            QMessageBox.information(
+                self, "Auswahl", "Bitte Benutzer auswählen.")
+            return
+        try:
+            self.auth.require(self.current_user, Perm.MANAGE_ROLES)
+        except PermissionDenied as e:
+            QMessageBox.warning(self, "Keine Berechtigung", str(e))
+            return
         user = self.ctx.db.get_user(uid)
         selected = self.ctx.db.user_role_ids(uid)
-        dialog = QDialog(self); dialog.setWindowTitle(f"Rollen: {user['username']}")
-        layout = QVBoxLayout(dialog); checks = {}
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Rollen: {user['username']}")
+        layout = QVBoxLayout(dialog)
+        checks = {}
         for role in self.ctx.db.list_roles():
-            checkbox = QCheckBox(f"{role['name']} – {role.get('description') or ''}")
-            checkbox.setChecked(role['id'] in selected or (user.get('is_admin') and role['id'] == 1))
-            checkbox.setEnabled(not (user.get('is_admin') and role['id'] == 1))
-            checks[role['id']] = checkbox; layout.addWidget(checkbox)
-        save = QPushButton("Speichern"); save.clicked.connect(dialog.accept); layout.addWidget(save)
+            checkbox = QCheckBox(
+                f"{role['name']} – {role.get('description') or ''}")
+            checkbox.setChecked(
+                role['id'] in selected
+                or (user.get('is_admin') and role['id'] == 1))
+            checkbox.setEnabled(
+                not (user.get('is_admin') and role['id'] == 1))
+            checks[role['id']] = checkbox
+            layout.addWidget(checkbox)
+        save = QPushButton("Speichern")
+        save.clicked.connect(dialog.accept)
+        layout.addWidget(save)
         if dialog.exec_():
             try:
-                self.auth.set_roles(uid, {rid for rid, cb in checks.items() if cb.isChecked()}, self.current_user["id"])
+                self.auth.set_roles(
+                    uid,
+                    {rid for rid, cb in checks.items() if cb.isChecked()},
+                    self.current_user["id"])
                 self.refresh()
-            except (AuthError, ValueError) as exc: QMessageBox.warning(self, "Rollen", str(exc))
+            except (AuthError, ValueError) as exc:
+                QMessageBox.warning(self, "Rollen", str(exc))
