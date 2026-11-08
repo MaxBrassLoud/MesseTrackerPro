@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="c60f2c98-40cc-40cc-b722-071ca156131b" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/Messe_Desktop.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/application.fam" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/images/.gitkeep" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/messe_tracker_app.c" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/messe_tracker_sync.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/template.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitattributes" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/auth.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/backup.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/contact_extras.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/custom_fields.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/duplicates.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/export.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/net.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/ocr.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/pdf_report.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/permissions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/ssl_cert.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/database/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/database/db.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/database/schema.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_auth.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_core.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_crm.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/dialogs/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/dialogs/merge_dialog.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/dialogs/password_change.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/login_dialog.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/main_window.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/company_profile.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/contact_profile.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/contacts.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/dashboard.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/employees.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/fairs.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/home.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/merch.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/queue.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/reports.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/settings.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/pages/users.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/setup_wizard.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/styles.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/themes.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/widgets.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/server.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/static/jsQR.min.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/static/manifest.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/static/offline.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/static/sw.js" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3Km3NiwmMpv51Wb8mezAiMXpaXy" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python tests.Python tests in test_core.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_scanner.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.pytest for tests.test_core.test_api_does_not_require_csrf.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.pytest in test_core.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.run.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Flipper&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/maxbr/Documents/GitHub/Messe_Desktop&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\maxbr\Documents\GitHub\Messe_Desktop" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\maxbr\Documents\GitHub\Messe_Desktop\web\static" />
+      <recent name="C:\Users\maxbr\Documents\GitHub\Messe_Desktop\ui\dialogs" />
+      <recent name="C:\Users\maxbr\Documents\GitHub\Messe_Desktop\messe_tracker_pro\web" />
+      <recent name="C:\Users\maxbr\Documents\GitHub\Messe_Desktop\messe_tracker_pro\web\static" />
+      <recent name="C:\Users\maxbr\Documents\GitHub\Messe_Desktop" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.messe_tracker_sync">
+    <configuration name="messe_tracker_sync" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
+      <module name="Messe_Desktop" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="SDK_NAME" value="Python 3.15 (Messe_Desktop)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <option name="RUN_TOOL" value="" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/messe_tracker_sync.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest for tests.test_core.test_api_does_not_require_csrf" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="Messe_Desktop" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <option name="RUN_TOOL" value="" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.test_core.test_api_does_not_require_csrf&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.messe_tracker_sync" />
+      <item itemvalue="Python tests.pytest for tests.test_core.test_api_does_not_require_csrf" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python tests.pytest for tests.test_core.test_api_does_not_require_csrf" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-50341a9f1f9c-c2ffad84badb-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-261.26222.68" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="c60f2c98-40cc-40cc-b722-071ca156131b" name="Changes" comment="" />
+      <created>1792148877190</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1792148877190</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>
