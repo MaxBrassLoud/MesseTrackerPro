@@ -741,28 +741,36 @@ static void format_timestamp(char* out, size_t out_len) {
              (unsigned)dt.hour, (unsigned)dt.minute, (unsigned)dt.second);
 }
 
-static void write_log_line(const char* day_name, const char* line) {
-    if(!day_name || !day_name[0]) return;
+static bool write_log_line(const char* day_name, const char* line) {
+    if(!day_name || !day_name[0] || !line) return false;
     Storage* s = furi_record_open(RECORD_STORAGE);
     File* f = storage_file_alloc(s);
     char path[256];
     get_day_path(day_name, path, sizeof(path));
+    bool ok = false;
     if(storage_file_open(f, path, FSAM_WRITE, FSOM_OPEN_APPEND)) {
         size_t l = strlen(line);
-        if(storage_file_write(f, line, l) != l) {
-            FURI_LOG_W(TAG, "Logwrite unvollstaendig");
+        size_t written = storage_file_write(f, line, l);
+        if(written == l) {
+            ok = true;
+        } else {
+            FURI_LOG_E(TAG, "Logwrite unvollstaendig: %u von %u Bytes",
+                       (unsigned)written, (unsigned)l);
         }
         storage_file_close(f);
+    } else {
+        FURI_LOG_E(TAG, "Logdatei nicht oeffenbar: %s", path);
     }
     storage_file_free(f);
     furi_record_close(RECORD_STORAGE);
+    return ok;
 }
 
-static void log_merch(MyApp* app, const char* action, const char* name, int value) {
-    if(app->current_day[0] == '\0') return;
+static bool log_merch(MyApp* app, const char* action, const char* name, int value) {
+    if(app->current_day[0] == '\0') return false;
     char line[LINE_BUF];
     snprintf(line, sizeof(line), "MERCH %s %s;%d\n", action, name, value);
-    write_log_line(app->current_day, line);
+    return write_log_line(app->current_day, line);
 }
 
 static bool day_exists(const char* name) {
@@ -838,14 +846,19 @@ static void load_day_products_from_log(MyApp* app) {
                 for(size_t i = 0; i < app->product_count; i++) {
                     if(strcmp(app->products[i].name, pname) == 0) {
                         uint16_t v = parse_uint16_clamped(val);
-                        int delta = (int)v - (int)app->products[i].current;
-                        if(delta < 0) delta = 0;
-                        app->products[i].refilled = (uint16_t)(app->products[i].refilled + delta);
-                        app->products[i].current = v;
+                        int current = (int)app->products[i].current;
+                        if((int)v >= current) {
+                            int delta = (int)v - current;
+                            int refilled = (int)app->products[i].refilled + delta;
+                            if(refilled > 65535) refilled = 65535;
+                            app->products[i].refilled = (uint16_t)refilled;
+                            app->products[i].current = v;
+                        }
                         break;
                     }
                 }
             }
+
         } else if(strncmp(line, "KUNDE|#", 7) == 0) {
             uint16_t id = parse_uint16_clamped(line + 7);
             if(id >= app->next_customer_id) app->next_customer_id = (uint16_t)(id + 1);
@@ -863,24 +876,37 @@ static void create_day_with_initial(MyApp* app) {
     char ts[32];
     format_timestamp(ts, sizeof(ts));
     char line[LINE_BUF];
+    bool ok = true;
 
     snprintf(line, sizeof(line), "MESSE %u\n", app->current_messe_id);
-    write_log_line(app->current_day, line);
-    snprintf(line, sizeof(line), "TAG GESTARTET %s\n", ts);
-    write_log_line(app->current_day, line);
+    if(!write_log_line(app->current_day, line)) ok = false;
+
+    if(ok) {
+        snprintf(line, sizeof(line), "TAG GESTARTET %s\n", ts);
+        if(!write_log_line(app->current_day, line)) ok = false;
+    }
+    for(size_t i = 0; ok && i < app->product_count; i++) {
+        snprintf(line, sizeof(line), "STARTBESTAND %s;%u\n",
+                 app->products[i].name, (unsigned)app->products[i].initial);
+        if(!write_log_line(app->current_day, line)) ok = false;
+    }
+    if(ok) {
+        snprintf(line, sizeof(line), "BETRETEN %s\n", ts);
+        if(!write_log_line(app->current_day, line)) ok = false;
+    }
+
+    if(!ok) {
+        FURI_LOG_E(TAG, "Tagesstart unvollstaendig geschrieben – State bleibt alt");
+        app->popup_kind = MyAppPopupKindErrorEmptyName;
+        return;
+    }
 
     for(size_t i = 0; i < app->product_count; i++) {
-        snprintf(line, sizeof(line), "STARTBESTAND %s;%u\n", app->products[i].name, (unsigned)app->products[i].initial);
-        write_log_line(app->current_day, line);
         app->products[i].current = app->products[i].initial;
         app->products[i].refilled = 0;
     }
-
-    snprintf(line, sizeof(line), "BETRETEN %s\n", ts);
-    write_log_line(app->current_day, line);
     app->at_booth = true;
     app->next_customer_id = 1;
-
     save_state(app);
     haptic_tap(app);
 }
@@ -889,8 +915,12 @@ static void day_toggle_booth(MyApp* app) {
     char ts[32];
     format_timestamp(ts, sizeof(ts));
     char line[LINE_BUF];
-    snprintf(line, sizeof(line), "%s %s\n", app->at_booth ? "VERLASSEN" : "BETRETEN", ts);
-    write_log_line(app->current_day, line);
+    snprintf(line, sizeof(line), "%s %s\n",
+             app->at_booth ? "VERLASSEN" : "BETRETEN", ts);
+    if(!write_log_line(app->current_day, line)) {
+        FURI_LOG_E(TAG, "Booth-Toggle nicht geschrieben – Status bleibt");
+        return;
+    }
     app->at_booth = !app->at_booth;
     save_state(app);
     haptic_tap(app);
@@ -908,7 +938,8 @@ static void add_customer(MyApp* app, size_t category_idx) {
     if(new_hour >= 24) { new_hour = 23; new_min = 45; }
 
     const char* name = app->current_customer[0] ? app->current_customer : "Anonym";
-    char safe_name[CUSTOMER_NAME_LEN], safe_company[CUSTOMER_COMPANY_LEN], safe_email[CUSTOMER_EMAIL_LEN], safe_phone[CUSTOMER_PHONE_LEN], safe_desc[CUSTOMER_DESC_LEN];
+    char safe_name[CUSTOMER_NAME_LEN], safe_company[CUSTOMER_COMPANY_LEN];
+    char safe_email[CUSTOMER_EMAIL_LEN], safe_phone[CUSTOMER_PHONE_LEN], safe_desc[CUSTOMER_DESC_LEN];
     sanitize_field(name, safe_name, sizeof(safe_name));
     sanitize_field(app->current_customer_company, safe_company, sizeof(safe_company));
     sanitize_field(app->current_customer_email, safe_email, sizeof(safe_email));
@@ -923,8 +954,13 @@ static void add_customer(MyApp* app, size_t category_idx) {
              (unsigned)new_hour, (unsigned)new_min,
              app->category_ids[category_idx],
              safe_name, safe_company, safe_email, safe_phone, safe_desc);
-    write_log_line(app->current_day, line);
 
+    if(!write_log_line(app->current_day, line)) {
+        FURI_LOG_E(TAG, "Kunde #%u nicht gespeichert",
+                   (unsigned)app->next_customer_id);
+        app->popup_kind = MyAppPopupKindErrorEmptyName;
+        return;
+    }
     app->next_customer_id++;
     save_state(app);
 }
@@ -934,7 +970,11 @@ static void end_day(MyApp* app) {
     format_timestamp(ts, sizeof(ts));
     char line[LINE_BUF];
     snprintf(line, sizeof(line), "TAG BEENDET %s\n", ts);
-    write_log_line(app->current_day, line);
+    if(!write_log_line(app->current_day, line)) {
+        FURI_LOG_E(TAG, "TAG BEENDET konnte nicht geschrieben werden – "
+                        "Tag bleibt aktiv");
+        return;
+    }
     app->current_day[0] = '\0';
     app->current_messe[0] = '\0';
     app->current_messe_id = 0;
@@ -956,6 +996,8 @@ static void merch_apply_initial(MyApp* app, size_t idx, int value) {
 
 static void merch_apply_count(MyApp* app, size_t idx, int new_count) {
     if(idx >= app->product_count) return;
+    if(new_count < 0) new_count = 0;
+    if(new_count > 65535) new_count = 65535;
     MerchProduct* p = &app->products[idx];
     bool first = (p->initial == 0 && p->refilled == 0 && p->current == 0);
     if(first) {
@@ -973,10 +1015,18 @@ static void merch_apply_count(MyApp* app, size_t idx, int new_count) {
 
 static void merch_apply_refill(MyApp* app, size_t idx, int new_total) {
     if(idx >= app->product_count) return;
+    if(new_total < 0) new_total = 0;
+    if(new_total > 65535) new_total = 65535;
     MerchProduct* p = &app->products[idx];
-    int delta = new_total - (int)p->current;
-    if(delta < 0) delta = 0;
-    p->refilled = (uint16_t)(p->refilled + delta);
+    int current = (int)p->current;
+    int delta = new_total - current;
+    if(delta < 0) {
+        /* Kein Rückbuchen über Nachfüllen */
+        return;
+    }
+    int refilled = (int)p->refilled + delta;
+    if(refilled > 65535) refilled = 65535;
+    p->refilled = (uint16_t)refilled;
     p->current = (uint16_t)new_total;
     log_merch(app, "NACHGEFUELLT", p->name, new_total);
 }
