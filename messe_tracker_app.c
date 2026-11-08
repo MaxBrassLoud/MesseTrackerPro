@@ -47,188 +47,116 @@
  *  Views
  * ===================================================================== */
 typedef enum {
-    MyAppViewMainMenu,
-    MyAppViewDayMenu,
-    MyAppViewCustomerCategory,
-    MyAppViewSettings,
-    MyAppViewEditCategories,
-    MyAppViewCategoryActions,
-    MyAppViewConfirmEndDay,
-    MyAppViewConfirmToggle,
-    MyAppViewTextInput,
-    MyAppViewPopup,
-    MyAppViewMerchMenu,
-    MyAppViewMerchAfterCount,
-    MyAppViewProductList,
-    MyAppViewProductActions,
-    MyAppViewProductDeleteConfirm,
-    MyAppViewMesseSelect,
-    MyAppViewMesseList,
-    MyAppViewMesseActions,
-    MyAppViewMesseDeleteConfirm,
-    MyAppViewCategoryDeleteConfirm,
-    MyAppViewCount,
+    MyAppViewMainMenu, MyAppViewDayMenu, MyAppViewCustomerCategory,
+    MyAppViewSettings, MyAppViewEditCategories, MyAppViewCategoryActions,
+    MyAppViewConfirmEndDay, MyAppViewConfirmToggle, MyAppViewTextInput,
+    MyAppViewPopup, MyAppViewMerchMenu, MyAppViewMerchAfterCount,
+    MyAppViewProductList, MyAppViewProductActions, MyAppViewProductDeleteConfirm,
+    MyAppViewMesseSelect, MyAppViewMesseList, MyAppViewMesseActions,
+    MyAppViewMesseDeleteConfirm, MyAppViewCategoryDeleteConfirm, MyAppViewCount,
 } MyAppView;
 
 /* =====================================================================
  *  Szenen
  * ===================================================================== */
 typedef enum {
-    MyAppSceneMainMenu,
-    MyAppSceneDayMenu,
-    MyAppSceneCustomerCategory,
-    MyAppSceneSettings,
-    MyAppSceneEditCategories,
-    MyAppSceneCategoryActions,
-    MyAppSceneConfirmEndDay,
-    MyAppSceneConfirmToggle,
-    MyAppSceneTextInput,
-    MyAppScenePopup,
-    MyAppSceneMerchMenu,
-    MyAppSceneMerchAfterCount,
-    MyAppSceneProductList,
-    MyAppSceneProductActions,
-    MyAppSceneProductDeleteConfirm,
-    MyAppSceneMesseSelect,
-    MyAppSceneMesseList,
-    MyAppSceneMesseActions,
-    MyAppSceneMesseDeleteConfirm,
-    MyAppSceneCategoryDeleteConfirm,
-    MyAppSceneCount,
+    MyAppSceneMainMenu, MyAppSceneDayMenu, MyAppSceneCustomerCategory,
+    MyAppSceneSettings, MyAppSceneEditCategories, MyAppSceneCategoryActions,
+    MyAppSceneConfirmEndDay, MyAppSceneConfirmToggle, MyAppSceneTextInput,
+    MyAppScenePopup, MyAppSceneMerchMenu, MyAppSceneMerchAfterCount,
+    MyAppSceneProductList, MyAppSceneProductActions, MyAppSceneProductDeleteConfirm,
+    MyAppSceneMesseSelect, MyAppSceneMesseList, MyAppSceneMesseActions,
+    MyAppSceneMesseDeleteConfirm, MyAppSceneCategoryDeleteConfirm, MyAppSceneCount,
 } MyAppScene;
 
 /* =====================================================================
  *  Indizes
  * ===================================================================== */
 typedef enum {
-    MyAppMainMenuIndexNewDay,
-    MyAppMainMenuIndexResumeDay,
-    MyAppMainMenuIndexSettings,
+    MyAppMainMenuIndexNewDay, MyAppMainMenuIndexResumeDay, MyAppMainMenuIndexSettings,
 } MyAppMainMenuIndex;
 
 typedef enum {
-    MyAppDayMenuIndexToggle,
-    MyAppDayMenuIndexAddCustomer,
-    MyAppDayMenuIndexMerch,
-    MyAppDayMenuIndexEndDay,
+    MyAppDayMenuIndexToggle, MyAppDayMenuIndexAddCustomer, MyAppDayMenuIndexMerch, MyAppDayMenuIndexEndDay,
 } MyAppDayMenuIndex;
 
 typedef enum {
-    MyAppSettingsIndexManageMessen,
-    MyAppSettingsIndexEditCategories,
-    MyAppSettingsIndexUsbInfo,
+    MyAppSettingsIndexManageMessen, MyAppSettingsIndexEditCategories, MyAppSettingsIndexUsbInfo,
 } MyAppSettingsIndex;
 
 typedef enum {
-    MyAppCategoryActionsIndexEdit,
-    MyAppCategoryActionsIndexDelete,
+    MyAppCategoryActionsIndexEdit, MyAppCategoryActionsIndexDelete,
 } MyAppCategoryActionsIndex;
 
 typedef enum {
-    MyAppConfirmEndDayIndexYes,
-    MyAppConfirmEndDayIndexNo,
+    MyAppConfirmEndDayIndexYes, MyAppConfirmEndDayIndexNo,
 } MyAppConfirmEndDayIndex;
 
 typedef enum {
-    MyAppConfirmToggleIndexYes,
-    MyAppConfirmToggleIndexNo,
+    MyAppConfirmToggleIndexYes, MyAppConfirmToggleIndexNo,
 } MyAppConfirmToggleIndex;
 
 typedef enum {
-    MyAppMerchMenuIndexCountAll,
-    MyAppMerchMenuIndexRefillAll,
-    MyAppMerchMenuIndexProductList,
+    MyAppMerchMenuIndexCountAll, MyAppMerchMenuIndexRefillAll, MyAppMerchMenuIndexProductList,
 } MyAppMerchMenuIndex;
 
 typedef enum {
-    MyAppMerchAfterCountIndexYes,
-    MyAppMerchAfterCountIndexNo,
+    MyAppMerchAfterCountIndexYes, MyAppMerchAfterCountIndexNo,
 } MyAppMerchAfterCountIndex;
 
 typedef enum {
-    MyAppProductActionsIndexCount,
-    MyAppProductActionsIndexRefill,
-    MyAppProductActionsIndexRename,
-    MyAppProductActionsIndexDelete,
+    MyAppProductActionsIndexCount, MyAppProductActionsIndexRefill, MyAppProductActionsIndexRename, MyAppProductActionsIndexDelete,
 } MyAppProductActionsIndex;
 
 typedef enum {
-    MyAppProductDeleteConfirmIndexYes,
-    MyAppProductDeleteConfirmIndexNo,
+    MyAppProductDeleteConfirmIndexYes, MyAppProductDeleteConfirmIndexNo,
 } MyAppProductDeleteConfirmIndex;
 
 typedef enum {
-    MyAppMesseActionsIndexEditProducts,
-    MyAppMesseActionsIndexRename,
-    MyAppMesseActionsIndexDelete,
+    MyAppMesseActionsIndexEditProducts, MyAppMesseActionsIndexRename, MyAppMesseActionsIndexDelete,
 } MyAppMesseActionsIndex;
 
 typedef enum {
-    MyAppMesseDeleteConfirmIndexYes,
-    MyAppMesseDeleteConfirmIndexNo,
+    MyAppMesseDeleteConfirmIndexYes, MyAppMesseDeleteConfirmIndexNo,
 } MyAppMesseDeleteConfirmIndex;
 
 typedef enum {
-    MyAppCategoryDeleteConfirmIndexYes,
-    MyAppCategoryDeleteConfirmIndexNo,
+    MyAppCategoryDeleteConfirmIndexYes, MyAppCategoryDeleteConfirmIndexNo,
 } MyAppCategoryDeleteConfirmIndex;
 
 /* =====================================================================
  *  TextInput-Zwecke
  * ===================================================================== */
 typedef enum {
-    MyAppTextInputPurposeNone,
-    MyAppTextInputPurposeDayName,
-    MyAppTextInputPurposeCustomerName,
-    MyAppTextInputPurposeCustomerCompany,
-    MyAppTextInputPurposeCustomerEmail,
-    MyAppTextInputPurposeCustomerPhone,
-    MyAppTextInputPurposeCustomerDesc,
-    MyAppTextInputPurposeNewCategory,
-    MyAppTextInputPurposeEditCategory,
-    MyAppTextInputPurposeEndDayConfirm,
-    MyAppTextInputPurposeMerchCountBulk,
-    MyAppTextInputPurposeMerchRefillBulk,
-    MyAppTextInputPurposeMerchInitialBulk,
-    MyAppTextInputPurposeMerchCountSingle,
-    MyAppTextInputPurposeMerchRefillSingle,
-    MyAppTextInputPurposeMerchNewName,
-    MyAppTextInputPurposeMerchEditName,
-    MyAppTextInputPurposeNewMesseName,
+    MyAppTextInputPurposeNone, MyAppTextInputPurposeDayName,
+    MyAppTextInputPurposeCustomerName, MyAppTextInputPurposeCustomerCompany,
+    MyAppTextInputPurposeCustomerEmail, MyAppTextInputPurposeCustomerPhone,
+    MyAppTextInputPurposeCustomerDesc, MyAppTextInputPurposeNewCategory,
+    MyAppTextInputPurposeEditCategory, MyAppTextInputPurposeEndDayConfirm,
+    MyAppTextInputPurposeMerchCountBulk, MyAppTextInputPurposeMerchRefillBulk,
+    MyAppTextInputPurposeMerchInitialBulk, MyAppTextInputPurposeMerchCountSingle,
+    MyAppTextInputPurposeMerchRefillSingle, MyAppTextInputPurposeMerchNewName,
+    MyAppTextInputPurposeMerchEditName, MyAppTextInputPurposeNewMesseName,
     MyAppTextInputPurposeRenameMesse,
 } MyAppTextInputPurpose;
 
 typedef enum {
-    MerchBulkNone,
-    MerchBulkCount,
-    MerchBulkRefill,
-    MerchBulkInitial,
+    MerchBulkNone, MerchBulkCount, MerchBulkRefill, MerchBulkInitial,
 } MerchBulkMode;
 
 /* =====================================================================
  *  Popup-Arten
  * ===================================================================== */
 typedef enum {
-    MyAppPopupKindNone,
-    MyAppPopupKindCustomerSaved,
-    MyAppPopupKindDayAlreadyActive,
-    MyAppPopupKindDayNameExists,
-    MyAppPopupKindMerchCountDone,
-    MyAppPopupKindMerchRefillDone,
-    MyAppPopupKindMerchNoProducts,
-    MyAppPopupKindMerchMaxProducts,
-    MyAppPopupKindMesseNoProducts,
-    MyAppPopupKindNoMessen,
-    MyAppPopupKindMesseNameExists,
-    MyAppPopupKindMesseSaved,
-    MyAppPopupKindErrorEmptyName,
-    MyAppPopupKindRefillBelowCurrent,
-    MyAppPopupKindUsbInfo,
+    MyAppPopupKindNone, MyAppPopupKindCustomerSaved, MyAppPopupKindDayAlreadyActive,
+    MyAppPopupKindDayNameExists, MyAppPopupKindMerchCountDone, MyAppPopupKindMerchRefillDone,
+    MyAppPopupKindMerchNoProducts, MyAppPopupKindMerchMaxProducts, MyAppPopupKindMesseNoProducts,
+    MyAppPopupKindNoMessen, MyAppPopupKindMesseNameExists, MyAppPopupKindMesseSaved,
+    MyAppPopupKindErrorEmptyName, MyAppPopupKindRefillBelowCurrent, MyAppPopupKindUsbInfo,
 } MyAppPopupKind;
 
 typedef enum {
-    ProductListModeDay,
-    ProductListModeMesseEdit,
+    ProductListModeDay, ProductListModeMesseEdit,
 } ProductListMode;
 
 /* =====================================================================
@@ -277,6 +205,7 @@ typedef struct {
     /* Aktueller Tag */
     char current_day[DAY_NAME_LEN];
     char current_messe[MESSE_NAME_LEN];
+    uint16_t current_messe_id;
     bool at_booth;
     uint16_t next_customer_id;
 
@@ -289,16 +218,20 @@ typedef struct {
 
     /* Kategorien */
     char categories[MAX_CATEGORIES][CATEGORY_LEN];
+    uint16_t category_ids[MAX_CATEGORIES];
     size_t category_count;
     size_t editing_category_index;
 
     /* Messen */
     char messen[MAX_MESSEN][MESSE_NAME_LEN];
     char messen_display[MAX_MESSEN][MESSE_DISPLAY_LEN];
+    uint16_t messen_ids[MAX_MESSEN];
     size_t messen_count;
     size_t editing_messe_index;
+
     char pending_messe_name[MESSE_NAME_LEN];
     char pending_messe_display[MESSE_DISPLAY_LEN];
+    uint16_t pending_messe_id;
 
     /* Produkte */
     MerchProduct products[MAX_PRODUCTS];
@@ -379,7 +312,6 @@ static uint16_t parse_uint16_clamped(const char* s) {
     return (uint16_t)v;
 }
 
-/* Erlaubt: A-Z a-z 0-9 - _ ; Leerzeichen wird zu _ */
 static bool sanitize_name(const char* in, char* out, size_t out_len) {
     if(!in || !*in) return false;
     size_t j = 0;
@@ -395,7 +327,6 @@ static bool sanitize_name(const char* in, char* out, size_t out_len) {
     return j > 0;
 }
 
-/* Sanitize für Log-Felder: ersetzt Trenn-/Steuerzeichen durch '_' */
 static void sanitize_field(const char* in, char* out, size_t out_len) {
     if(out_len == 0) return;
     size_t j = 0;
@@ -435,7 +366,7 @@ static void ensure_dirs(void) {
 }
 
 /* =====================================================================
- *  Datei-Helfer (heap-basiert, kein Stack-Risiko)
+ *  Datei-Helfer
  * ===================================================================== */
 static char* read_file_to_string(const char* path, size_t* out_len) {
     Storage* s = furi_record_open(RECORD_STORAGE);
@@ -449,8 +380,7 @@ static char* read_file_to_string(const char* path, size_t* out_len) {
         if(buf) {
             size_t total = 0;
             uint16_t n = 0;
-            while(total < size &&
-                  (n = storage_file_read(f, buf + total, (uint16_t)(size - total))) > 0) {
+            while(total < size && (n = storage_file_read(f, buf + total, (uint16_t)(size - total))) > 0) {
                 total += n;
             }
             buf[total] = '\0';
@@ -463,8 +393,6 @@ static char* read_file_to_string(const char* path, size_t* out_len) {
     return buf;
 }
 
-/* Atomarer Replace: schreibt tmp erst fertig, benennt alte Datei zu .bak,
- * dann tmp -> final, bei Erfolg .bak löschen, sonst zurückrollen. */
 static bool storage_atomic_commit(const char* tmp_path, const char* final_path) {
     Storage* s = furi_record_open(RECORD_STORAGE);
     char bak[300];
@@ -517,7 +445,11 @@ static void atomic_write_lines(const char* path, const char* const* lines, size_
  * ===================================================================== */
 static void save_categories(MyApp* app) {
     const char* lines[MAX_CATEGORIES];
-    for(size_t i = 0; i < app->category_count; i++) lines[i] = app->categories[i];
+    char bufs[MAX_CATEGORIES][CATEGORY_LEN + 8];
+    for(size_t i = 0; i < app->category_count; i++) {
+        snprintf(bufs[i], sizeof(bufs[i]), "%u|%s", app->category_ids[i], app->categories[i]);
+        lines[i] = bufs[i];
+    }
     atomic_write_lines(CONFIG_PATH, lines, app->category_count);
 }
 
@@ -534,7 +466,19 @@ static void load_categories(MyApp* app) {
             size_t l = strlen(line);
             if(l > 0 && line[l-1] == '\r') line[l-1] = '\0';
             if(*line && app->category_count < MAX_CATEGORIES) {
-                safe_copy(app->categories[app->category_count], line, CATEGORY_LEN);
+                char* sep = strchr(line, '|');
+                if(sep) {
+                    *sep = '\0';
+                    app->category_ids[app->category_count] = parse_uint16_clamped(line);
+                    safe_copy(app->categories[app->category_count], sep + 1, CATEGORY_LEN);
+                } else {
+                    // Fallback für alte Dateien ohne IDs
+                    uint16_t max_id = 0;
+                    for(size_t i = 0; i < app->category_count; i++)
+                        if(app->category_ids[i] > max_id) max_id = app->category_ids[i];
+                    app->category_ids[app->category_count] = max_id + 1;
+                    safe_copy(app->categories[app->category_count], line, CATEGORY_LEN);
+                }
                 app->category_count++;
             }
             if(!nl) break;
@@ -544,9 +488,9 @@ static void load_categories(MyApp* app) {
     }
 
     if(app->category_count == 0) {
-        safe_copy(app->categories[0], "Interessiert", CATEGORY_LEN);
-        safe_copy(app->categories[1], "Anfrage", CATEGORY_LEN);
-        safe_copy(app->categories[2], "Auftrag", CATEGORY_LEN);
+        safe_copy(app->categories[0], "Interessiert", CATEGORY_LEN); app->category_ids[0] = 1;
+        safe_copy(app->categories[1], "Anfrage", CATEGORY_LEN); app->category_ids[1] = 2;
+        safe_copy(app->categories[2], "Auftrag", CATEGORY_LEN); app->category_ids[2] = 3;
         app->category_count = 3;
         save_categories(app);
     }
@@ -557,10 +501,8 @@ static void load_categories(MyApp* app) {
  * ===================================================================== */
 static void save_state(MyApp* app) {
     char buf[LINE_BUF];
-    snprintf(buf, sizeof(buf),
-        "DAY=%s\nMESSE=%s\nAT_BOOTH=%d\nNEXT_ID=%u\n",
-        app->current_day, app->current_messe,
-        app->at_booth ? 1 : 0, (unsigned)app->next_customer_id);
+    snprintf(buf, sizeof(buf), "DAY=%s\nMESSE_ID=%u\nAT_BOOTH=%d\nNEXT_ID=%u\n",
+        app->current_day, app->current_messe_id, app->at_booth ? 1 : 0, (unsigned)app->next_customer_id);
 
     char tmp[280];
     snprintf(tmp, sizeof(tmp), "%s.tmp", STATE_PATH);
@@ -591,6 +533,7 @@ static void clear_state(void) {
 static bool load_state(MyApp* app) {
     app->current_day[0] = '\0';
     app->current_messe[0] = '\0';
+    app->current_messe_id = 0;
     app->at_booth = false;
     app->next_customer_id = 1;
 
@@ -607,7 +550,7 @@ static bool load_state(MyApp* app) {
         if(l > 0 && line[l-1] == '\r') line[l-1] = '\0';
 
         if(strncmp(line, "DAY=", 4) == 0) safe_copy(app->current_day, line + 4, DAY_NAME_LEN);
-        else if(strncmp(line, "MESSE=", 6) == 0) safe_copy(app->current_messe, line + 6, MESSE_NAME_LEN);
+        else if(strncmp(line, "MESSE_ID=", 9) == 0) app->current_messe_id = parse_uint16_clamped(line + 9);
         else if(strncmp(line, "AT_BOOTH=", 9) == 0) app->at_booth = (line[9] == '1');
         else if(strncmp(line, "NEXT_ID=", 8) == 0) app->next_customer_id = parse_uint16_clamped(line + 8);
 
@@ -634,25 +577,42 @@ static bool messe_exists(const char* name) {
     return ex;
 }
 
-/* Liest NAME= aus der ersten Zeile einer Messe-Datei */
-static void read_messe_display(const char* filename, char* out, size_t out_len) {
-    safe_copy(out, filename, out_len);
+static void read_messe_info(const char* filename, uint16_t* out_id, char* out_name, size_t name_len) {
+    *out_id = 0;
+    safe_copy(out_name, filename, name_len);
+
     char path[256];
     get_messe_path(filename, path, sizeof(path));
 
     Storage* s = furi_record_open(RECORD_STORAGE);
     File* f = storage_file_alloc(s);
     if(storage_file_open(f, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
-        char buf[160];
+        char buf[256];
         uint16_t n = storage_file_read(f, buf, sizeof(buf) - 1);
         buf[n] = '\0';
-        if(strncmp(buf, "NAME=", 5) == 0) {
-            char* nl = strchr(buf, '\n');
-            if(nl) *nl = '\0';
-            char* cr = strchr(buf, '\r');
-            if(cr) *cr = '\0';
-            safe_copy(out, buf + 5, out_len);
+
+        // Manuelle Zeilenaufteilung statt strtok_r
+        char* line_start = buf;
+        while(line_start && *line_start) {
+            char* line_end = strchr(line_start, '\n');
+            if(line_end) {
+                *line_end = '\0';
+                // Wagenrücklauf am Zeilenende entfernen
+                if(line_end > line_start && *(line_end - 1) == '\r') {
+                    *(line_end - 1) = '\0';
+                }
+            }
+
+            if(strncmp(line_start, "ID=", 3) == 0) {
+                *out_id = parse_uint16_clamped(line_start + 3);
+            } else if(strncmp(line_start, "NAME=", 5) == 0) {
+                safe_copy(out_name, line_start + 5, name_len);
+            }
+
+            if(!line_end) break;
+            line_start = line_end + 1;
         }
+
         storage_file_close(f);
     }
     storage_file_free(f);
@@ -679,19 +639,21 @@ static size_t list_messen(MyApp* app) {
     storage_file_free(f);
     furi_record_close(RECORD_STORAGE);
 
-    /* Sortieren */
-    for(size_t i = 0; i < count; i++)
-        for(size_t j = i + 1; j < count; j++)
-            if(strcmp(app->messen[i], app->messen[j]) > 0) {
-                char tmp[MESSE_NAME_LEN];
-                safe_copy(tmp, app->messen[i], MESSE_NAME_LEN);
-                safe_copy(app->messen[i], app->messen[j], MESSE_NAME_LEN);
-                safe_copy(app->messen[j], tmp, MESSE_NAME_LEN);
-            }
+    // IDs und Anzeigenamen lesen
+    for(size_t i = 0; i < count; i++) {
+        read_messe_info(app->messen[i], &app->messen_ids[i], app->messen_display[i], MESSE_DISPLAY_LEN);
+    }
 
-    /* Anzeigenamen einlesen */
-    for(size_t i = 0; i < count; i++)
-        read_messe_display(app->messen[i], app->messen_display[i], MESSE_DISPLAY_LEN);
+    // Sortieren nach Name
+    for(size_t i = 0; i < count; i++) {
+        for(size_t j = i + 1; j < count; j++) {
+            if(strcmp(app->messen_display[i], app->messen_display[j]) > 0) {
+                char tmp_slug[MESSE_NAME_LEN]; safe_copy(tmp_slug, app->messen[i], MESSE_NAME_LEN); safe_copy(app->messen[i], app->messen[j], MESSE_NAME_LEN); safe_copy(app->messen[j], tmp_slug, MESSE_NAME_LEN);
+                char tmp_disp[MESSE_DISPLAY_LEN]; safe_copy(tmp_disp, app->messen_display[i], MESSE_DISPLAY_LEN); safe_copy(app->messen_display[i], app->messen_display[j], MESSE_DISPLAY_LEN); safe_copy(app->messen_display[j], tmp_disp, MESSE_DISPLAY_LEN);
+                uint16_t tmp_id = app->messen_ids[i]; app->messen_ids[i] = app->messen_ids[j]; app->messen_ids[j] = tmp_id;
+            }
+        }
+    }
 
     app->messen_count = count;
     return count;
@@ -709,7 +671,7 @@ static void save_messe(MyApp* app) {
     if(storage_file_open(f, tmp, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
         bool ok = true;
         char line[LINE_BUF];
-        int n = snprintf(line, sizeof(line), "NAME=%s\n", app->pending_messe_display);
+        int n = snprintf(line, sizeof(line), "ID=%u\nNAME=%s\n", app->pending_messe_id, app->pending_messe_display);
         if(n > 0 && storage_file_write(f, line, n) != (size_t)n) ok = false;
         for(size_t i = 0; ok && i < app->product_count; i++) {
             n = snprintf(line, sizeof(line), "PRODUKT %s\n", app->products[i].name);
@@ -796,7 +758,6 @@ static void write_log_line(const char* day_name, const char* line) {
     furi_record_close(RECORD_STORAGE);
 }
 
-/* MERCH-Log: nutzt ';' als Trenner zwischen Name und Wert */
 static void log_merch(MyApp* app, const char* action, const char* name, int value) {
     if(app->current_day[0] == '\0') return;
     char line[LINE_BUF];
@@ -813,8 +774,16 @@ static bool day_exists(const char* name) {
     return ex;
 }
 
-/* Rekonstruiert Produktzustand + next_customer_id aus Tageslog */
 static void load_day_products_from_log(MyApp* app) {
+    // Dateiname aus ID suchen
+    app->current_messe[0] = '\0';
+    for(size_t i = 0; i < app->messen_count; i++) {
+        if(app->messen_ids[i] == app->current_messe_id) {
+            safe_copy(app->current_messe, app->messen[i], MESSE_NAME_LEN);
+            break;
+        }
+    }
+
     if(app->current_messe[0] == '\0') return;
     load_messe_products(app, app->current_messe);
 
@@ -854,10 +823,7 @@ static void load_day_products_from_log(MyApp* app) {
                 for(size_t i = 0; i < app->product_count; i++) {
                     if(strcmp(app->products[i].name, pname) == 0) {
                         uint16_t v = parse_uint16_clamped(val);
-                        /* Falls kein STARTBESTAND bekannt: initial nachziehen */
-                        if(app->products[i].initial == 0 &&
-                           app->products[i].refilled == 0 &&
-                           app->products[i].current == 0) {
+                        if(app->products[i].initial == 0 && app->products[i].refilled == 0 && app->products[i].current == 0) {
                             app->products[i].initial = v;
                         }
                         app->products[i].current = v;
@@ -874,19 +840,16 @@ static void load_day_products_from_log(MyApp* app) {
                         uint16_t v = parse_uint16_clamped(val);
                         int delta = (int)v - (int)app->products[i].current;
                         if(delta < 0) delta = 0;
-                        app->products[i].refilled =
-                            (uint16_t)(app->products[i].refilled + delta);
+                        app->products[i].refilled = (uint16_t)(app->products[i].refilled + delta);
                         app->products[i].current = v;
                         break;
                     }
                 }
             }
         } else if(strncmp(line, "KUNDE|#", 7) == 0) {
-            /* Höchste bisherige ID finden, damit next_customer_id weiterzählt */
             uint16_t id = parse_uint16_clamped(line + 7);
             if(id >= app->next_customer_id) app->next_customer_id = (uint16_t)(id + 1);
         }
-
         if(!nl) break;
         line = nl + 1;
     }
@@ -901,14 +864,13 @@ static void create_day_with_initial(MyApp* app) {
     format_timestamp(ts, sizeof(ts));
     char line[LINE_BUF];
 
-    snprintf(line, sizeof(line), "MESSE %s\n", app->current_messe);
+    snprintf(line, sizeof(line), "MESSE %u\n", app->current_messe_id);
     write_log_line(app->current_day, line);
     snprintf(line, sizeof(line), "TAG GESTARTET %s\n", ts);
     write_log_line(app->current_day, line);
 
     for(size_t i = 0; i < app->product_count; i++) {
-        snprintf(line, sizeof(line), "STARTBESTAND %s;%u\n",
-                 app->products[i].name, (unsigned)app->products[i].initial);
+        snprintf(line, sizeof(line), "STARTBESTAND %s;%u\n", app->products[i].name, (unsigned)app->products[i].initial);
         write_log_line(app->current_day, line);
         app->products[i].current = app->products[i].initial;
         app->products[i].refilled = 0;
@@ -934,7 +896,8 @@ static void day_toggle_booth(MyApp* app) {
     haptic_tap(app);
 }
 
-static void add_customer(MyApp* app, const char* category) {
+static void add_customer(MyApp* app, size_t category_idx) {
+    if(category_idx >= app->category_count) return;
     DateTime dt;
     furi_hal_rtc_get_datetime(&dt);
     int total_min = dt.hour * 60 + dt.minute;
@@ -945,27 +908,21 @@ static void add_customer(MyApp* app, const char* category) {
     if(new_hour >= 24) { new_hour = 23; new_min = 45; }
 
     const char* name = app->current_customer[0] ? app->current_customer : "Anonym";
-
-    char safe_name[CUSTOMER_NAME_LEN];
-    char safe_company[CUSTOMER_COMPANY_LEN];
-    char safe_email[CUSTOMER_EMAIL_LEN];
-    char safe_phone[CUSTOMER_PHONE_LEN];
-    char safe_desc[CUSTOMER_DESC_LEN];
-    char safe_cat[CATEGORY_LEN];
+    char safe_name[CUSTOMER_NAME_LEN], safe_company[CUSTOMER_COMPANY_LEN], safe_email[CUSTOMER_EMAIL_LEN], safe_phone[CUSTOMER_PHONE_LEN], safe_desc[CUSTOMER_DESC_LEN];
     sanitize_field(name, safe_name, sizeof(safe_name));
     sanitize_field(app->current_customer_company, safe_company, sizeof(safe_company));
     sanitize_field(app->current_customer_email, safe_email, sizeof(safe_email));
     sanitize_field(app->current_customer_phone, safe_phone, sizeof(safe_phone));
     sanitize_field(app->current_customer_desc, safe_desc, sizeof(safe_desc));
-    sanitize_field(category, safe_cat, sizeof(safe_cat));
 
     char line[LINE_BUF];
     snprintf(line, sizeof(line),
-             "KUNDE|#%04u|%04u-%02u-%02u|%02u:%02u|%s|%s|%s|%s|%s|%s\n",
+             "KUNDE|#%04u|%04u-%02u-%02u|%02u:%02u|%u|%s|%s|%s|%s|%s\n",
              (unsigned)app->next_customer_id,
              (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day,
              (unsigned)new_hour, (unsigned)new_min,
-             safe_cat, safe_name, safe_company, safe_email, safe_phone, safe_desc);
+             app->category_ids[category_idx],
+             safe_name, safe_company, safe_email, safe_phone, safe_desc);
     write_log_line(app->current_day, line);
 
     app->next_customer_id++;
@@ -980,6 +937,7 @@ static void end_day(MyApp* app) {
     write_log_line(app->current_day, line);
     app->current_day[0] = '\0';
     app->current_messe[0] = '\0';
+    app->current_messe_id = 0;
     app->at_booth = false;
     app->next_customer_id = 1;
     clear_state();
@@ -996,7 +954,6 @@ static void merch_apply_initial(MyApp* app, size_t idx, int value) {
     app->products[idx].refilled = 0;
 }
 
-/* Bestand aufnehmen. Wenn erstmalig: initial nachziehen und mitloggen. */
 static void merch_apply_count(MyApp* app, size_t idx, int new_count) {
     if(idx >= app->product_count) return;
     MerchProduct* p = &app->products[idx];
@@ -1051,32 +1008,21 @@ static void build_usb_info_text(MyApp* app) {
         snprintf(label, sizeof(label), "%s", sd_info.label);
         capacity_gb = (float)sd_info.kb_total / (1024.0f * 1024.0f);
     }
-
     bool usb_plugged = furi_hal_power_is_charging();
 
     if(usb_plugged) {
         snprintf(app->usb_info_text, sizeof(app->usb_info_text),
-            "USB: verbunden\n\n"
-            "SD-Label: %s\n"
-            "Groesse: %.1f GB\n\n"
-            "Am PC im Explorer nach\n"
-            "dem Laufwerk mit diesem\n"
-            "Namen suchen.",
+            "USB: verbunden\n\nSD-Label: %s\nGroesse: %.1f GB\n\nAm PC im Explorer nach\ndem Laufwerk mit diesem\nNamen suchen.",
             label, (double)capacity_gb);
     } else {
         snprintf(app->usb_info_text, sizeof(app->usb_info_text),
-            "USB: nicht angesteckt\n\n"
-            "SD-Label: %s\n"
-            "Groesse: %.1f GB\n\n"
-            "Am PC erscheint das\n"
-            "Laufwerk als\n"
-            "\"%s (E:)\" o. ae.",
+            "USB: nicht angesteckt\n\nSD-Label: %s\nGroesse: %.1f GB\n\nAm PC erscheint das\nLaufwerk als\n\"%s (E:)\" o. ae.",
             label, (double)capacity_gb, label);
     }
 }
 
 /* =====================================================================
- *  SZENE: Hauptmenü
+ *  SZENEN
  * ===================================================================== */
 void my_app_scene_main_menu_on_enter(void* context) {
     MyApp* app = context;
@@ -1084,15 +1030,11 @@ void my_app_scene_main_menu_on_enter(void* context) {
     submenu_set_header(app->main_menu, "Messe Tracker");
 
     if(app->current_day[0] != '\0') {
-        submenu_add_item(app->main_menu, "Tag fortsetzen", MyAppMainMenuIndexResumeDay,
-                         my_app_main_menu_callback, app);
+        submenu_add_item(app->main_menu, "Tag fortsetzen", MyAppMainMenuIndexResumeDay, my_app_main_menu_callback, app);
     } else {
-        submenu_add_item(app->main_menu, "Neuen Tag starten", MyAppMainMenuIndexNewDay,
-                         my_app_main_menu_callback, app);
+        submenu_add_item(app->main_menu, "Neuen Tag starten", MyAppMainMenuIndexNewDay, my_app_main_menu_callback, app);
     }
-    submenu_add_item(app->main_menu, "Einstellungen", MyAppMainMenuIndexSettings,
-                     my_app_main_menu_callback, app);
-
+    submenu_add_item(app->main_menu, "Einstellungen", MyAppMainMenuIndexSettings, my_app_main_menu_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMainMenu);
 
     if(app->pending_auto_open_day) {
@@ -1110,7 +1052,13 @@ bool my_app_scene_main_menu_on_event(void* context, SceneManagerEvent event) {
                 scene_manager_next_scene(app->scene_manager, MyAppSceneDayMenu);
             consumed = true;
         } else if(event.event == MyAppMainMenuIndexNewDay) {
-            if(app->current_day[0] != '\0') {
+            list_messen(app); // Prüfen ob Messen existieren
+            if(app->messen_count == 0) {
+                app->popup_kind = MyAppPopupKindNoMessen;
+                app->popup_has_return = true;
+                app->popup_return_scene = MyAppSceneMainMenu;
+                scene_manager_next_scene(app->scene_manager, MyAppScenePopup);
+            } else if(app->current_day[0] != '\0') {
                 app->popup_kind = MyAppPopupKindDayAlreadyActive;
                 app->popup_has_return = true;
                 app->popup_return_scene = MyAppSceneMainMenu;
@@ -1118,8 +1066,7 @@ bool my_app_scene_main_menu_on_event(void* context, SceneManagerEvent event) {
             } else {
                 DateTime dt;
                 furi_hal_rtc_get_datetime(&dt);
-                snprintf(app->text_buffer, TEXT_BUF_LEN, "%04u-%02u-%02u",
-                         (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day);
+                snprintf(app->text_buffer, TEXT_BUF_LEN, "%04u-%02u-%02u", (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day);
                 app->text_input_purpose = MyAppTextInputPurposeDayName;
                 scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
             }
@@ -1135,12 +1082,8 @@ bool my_app_scene_main_menu_on_event(void* context, SceneManagerEvent event) {
     }
     return consumed;
 }
-
 void my_app_scene_main_menu_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Messe-Auswahl
- * ===================================================================== */
 void my_app_scene_messe_select_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->messe_select_menu);
@@ -1151,9 +1094,7 @@ void my_app_scene_messe_select_on_enter(void* context) {
         submenu_add_item(app->messe_select_menu, "(keine Messen)", 0, NULL, NULL);
     } else {
         for(size_t i = 0; i < app->messen_count; i++) {
-            submenu_add_item(app->messe_select_menu,
-                             app->messen_display[i], (uint32_t)i,
-                             my_app_messe_select_callback, app);
+            submenu_add_item(app->messe_select_menu, app->messen_display[i], (uint32_t)i, my_app_messe_select_callback, app);
         }
     }
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMesseSelect);
@@ -1165,6 +1106,7 @@ bool my_app_scene_messe_select_on_event(void* context, SceneManagerEvent event) 
     if(event.type == SceneManagerEventTypeCustom) {
         if(event.event < app->messen_count) {
             safe_copy(app->current_messe, app->messen[event.event], MESSE_NAME_LEN);
+            app->current_messe_id = app->messen_ids[event.event];
             load_messe_products(app, app->current_messe);
 
             if(app->product_count == 0) {
@@ -1192,25 +1134,15 @@ bool my_app_scene_messe_select_on_event(void* context, SceneManagerEvent event) 
     }
     return consumed;
 }
-
 void my_app_scene_messe_select_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Tages-Menü
- * ===================================================================== */
 static void day_menu_rebuild(MyApp* app) {
     submenu_reset(app->day_menu);
     submenu_set_header(app->day_menu, app->current_day);
-
-    submenu_add_item(app->day_menu,
-        app->at_booth ? "Stand verlassen" : "Stand betreten",
-        MyAppDayMenuIndexToggle, my_app_day_menu_callback, app);
-    submenu_add_item(app->day_menu, "Kunde hinzufuegen", MyAppDayMenuIndexAddCustomer,
-                     my_app_day_menu_callback, app);
-    submenu_add_item(app->day_menu, "Merch", MyAppDayMenuIndexMerch,
-                     my_app_day_menu_callback, app);
-    submenu_add_item(app->day_menu, "Tag beenden", MyAppDayMenuIndexEndDay,
-                     my_app_day_menu_callback, app);
+    submenu_add_item(app->day_menu, app->at_booth ? "Stand verlassen" : "Stand betreten", MyAppDayMenuIndexToggle, my_app_day_menu_callback, app);
+    submenu_add_item(app->day_menu, "Kunde hinzufuegen", MyAppDayMenuIndexAddCustomer, my_app_day_menu_callback, app);
+    submenu_add_item(app->day_menu, "Merch", MyAppDayMenuIndexMerch, my_app_day_menu_callback, app);
+    submenu_add_item(app->day_menu, "Tag beenden", MyAppDayMenuIndexEndDay, my_app_day_menu_callback, app);
 }
 
 void my_app_scene_day_menu_on_enter(void* context) {
@@ -1248,26 +1180,19 @@ bool my_app_scene_day_menu_on_event(void* context, SceneManagerEvent event) {
     }
     return consumed;
 }
-
 void my_app_scene_day_menu_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Bestätigung Stand betreten/verlassen
- * ===================================================================== */
 void my_app_scene_confirm_toggle_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->confirm_toggle_menu);
     if(app->at_booth) {
         submenu_set_header(app->confirm_toggle_menu, "Stand verlassen?");
-        submenu_add_item(app->confirm_toggle_menu, "Ja, verlassen",
-                         MyAppConfirmToggleIndexYes, my_app_confirm_toggle_callback, app);
+        submenu_add_item(app->confirm_toggle_menu, "Ja, verlassen", MyAppConfirmToggleIndexYes, my_app_confirm_toggle_callback, app);
     } else {
         submenu_set_header(app->confirm_toggle_menu, "Stand betreten?");
-        submenu_add_item(app->confirm_toggle_menu, "Ja, betreten",
-                         MyAppConfirmToggleIndexYes, my_app_confirm_toggle_callback, app);
+        submenu_add_item(app->confirm_toggle_menu, "Ja, betreten", MyAppConfirmToggleIndexYes, my_app_confirm_toggle_callback, app);
     }
-    submenu_add_item(app->confirm_toggle_menu, "Nein",
-                     MyAppConfirmToggleIndexNo, my_app_confirm_toggle_callback, app);
+    submenu_add_item(app->confirm_toggle_menu, "Nein", MyAppConfirmToggleIndexNo, my_app_confirm_toggle_callback, app);
     submenu_set_selected_item(app->confirm_toggle_menu, MyAppConfirmToggleIndexNo);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewConfirmToggle);
 }
@@ -1287,20 +1212,15 @@ bool my_app_scene_confirm_toggle_on_event(void* context, SceneManagerEvent event
     }
     return consumed;
 }
-
 void my_app_scene_confirm_toggle_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Kunden-Kategorie
- * ===================================================================== */
 void my_app_scene_customer_category_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->customer_category_menu);
     const char* name = app->current_customer[0] ? app->current_customer : "Anonym";
     submenu_set_header(app->customer_category_menu, name);
     for(size_t i = 0; i < app->category_count; i++)
-        submenu_add_item(app->customer_category_menu, app->categories[i], (uint32_t)i,
-                         my_app_customer_category_callback, app);
+        submenu_add_item(app->customer_category_menu, app->categories[i], (uint32_t)i, my_app_customer_category_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewCustomerCategory);
 }
 
@@ -1309,7 +1229,7 @@ bool my_app_scene_customer_category_on_event(void* context, SceneManagerEvent ev
     bool consumed = false;
     if(event.type == SceneManagerEventTypeCustom) {
         if(event.event < app->category_count) {
-            add_customer(app, app->categories[event.event]);
+            add_customer(app, event.event);
             app->popup_kind = MyAppPopupKindCustomerSaved;
             app->popup_has_return = false;
             scene_manager_next_scene(app->scene_manager, MyAppScenePopup);
@@ -1318,22 +1238,15 @@ bool my_app_scene_customer_category_on_event(void* context, SceneManagerEvent ev
     }
     return consumed;
 }
-
 void my_app_scene_customer_category_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Merch-Menü
- * ===================================================================== */
 void my_app_scene_merch_menu_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->merch_menu);
     submenu_set_header(app->merch_menu, "Merch");
-    submenu_add_item(app->merch_menu, "Bestand aufnehmen", MyAppMerchMenuIndexCountAll,
-                     my_app_merch_menu_callback, app);
-    submenu_add_item(app->merch_menu, "Nachfuellen", MyAppMerchMenuIndexRefillAll,
-                     my_app_merch_menu_callback, app);
-    submenu_add_item(app->merch_menu, "Produktliste", MyAppMerchMenuIndexProductList,
-                     my_app_merch_menu_callback, app);
+    submenu_add_item(app->merch_menu, "Bestand aufnehmen", MyAppMerchMenuIndexCountAll, my_app_merch_menu_callback, app);
+    submenu_add_item(app->merch_menu, "Nachfuellen", MyAppMerchMenuIndexRefillAll, my_app_merch_menu_callback, app);
+    submenu_add_item(app->merch_menu, "Produktliste", MyAppMerchMenuIndexProductList, my_app_merch_menu_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMerchMenu);
 
     if(app->pending_merch_bulk_continue) {
@@ -1362,9 +1275,7 @@ bool my_app_scene_merch_menu_on_event(void* context, SceneManagerEvent event) {
         } else if(event.event == CUSTOM_EVENT_BULK_FINISH) {
             MerchBulkMode finished = app->merch_bulk_mode;
             app->merch_bulk_mode = MerchBulkNone;
-            app->popup_kind = (finished == MerchBulkRefill)
-                                  ? MyAppPopupKindMerchRefillDone
-                                  : MyAppPopupKindMerchCountDone;
+            app->popup_kind = (finished == MerchBulkRefill) ? MyAppPopupKindMerchRefillDone : MyAppPopupKindMerchCountDone;
             app->popup_has_return = true;
             app->popup_return_scene = MyAppSceneMerchMenu;
             scene_manager_next_scene(app->scene_manager, MyAppScenePopup);
@@ -1405,12 +1316,8 @@ bool my_app_scene_merch_menu_on_event(void* context, SceneManagerEvent event) {
     }
     return consumed;
 }
-
 void my_app_scene_merch_menu_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Nachfrage "Nachfüllen?" nach Bestandsaufnahme
- * ===================================================================== */
 void my_app_scene_merch_after_count_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->merch_after_count_menu);
@@ -1421,10 +1328,8 @@ void my_app_scene_merch_after_count_on_enter(void* context) {
     } else {
         submenu_set_header(app->merch_after_count_menu, "Nachfuellen?");
     }
-    submenu_add_item(app->merch_after_count_menu, "Ja, jetzt nachfuellen",
-                     MyAppMerchAfterCountIndexYes, my_app_merch_after_count_callback, app);
-    submenu_add_item(app->merch_after_count_menu, "Nein, weiter",
-                     MyAppMerchAfterCountIndexNo, my_app_merch_after_count_callback, app);
+    submenu_add_item(app->merch_after_count_menu, "Ja, jetzt nachfuellen", MyAppMerchAfterCountIndexYes, my_app_merch_after_count_callback, app);
+    submenu_add_item(app->merch_after_count_menu, "Nein, weiter", MyAppMerchAfterCountIndexNo, my_app_merch_after_count_callback, app);
     submenu_set_selected_item(app->merch_after_count_menu, MyAppMerchAfterCountIndexNo);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMerchAfterCount);
 }
@@ -1446,12 +1351,8 @@ bool my_app_scene_merch_after_count_on_event(void* context, SceneManagerEvent ev
     }
     return consumed;
 }
-
 void my_app_scene_merch_after_count_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Produktliste
- * ===================================================================== */
 static void product_list_rebuild(MyApp* app) {
     submenu_reset(app->product_list_menu);
     if(app->product_list_mode == ProductListModeMesseEdit) {
@@ -1469,17 +1370,14 @@ static void product_list_rebuild(MyApp* app) {
             int current = (int)app->products[i].current;
             int used = total - current;
             if(used < 0) used = 0;
-            snprintf(label, sizeof(label), "%s %d/%d/%d",
-                     app->products[i].name, used, current, total);
+            snprintf(label, sizeof(label), "%s %d/%d/%d", app->products[i].name, used, current, total);
         } else {
             snprintf(label, sizeof(label), "%s", app->products[i].name);
         }
-        submenu_add_item(app->product_list_menu, label, (uint32_t)i,
-                         my_app_product_list_callback, app);
+        submenu_add_item(app->product_list_menu, label, (uint32_t)i, my_app_product_list_callback, app);
     }
     if(app->product_count < MAX_PRODUCTS) {
-        submenu_add_item(app->product_list_menu, "+ Neues Produkt",
-                         (uint32_t)app->product_count, my_app_product_list_callback, app);
+        submenu_add_item(app->product_list_menu, "+ Neues Produkt", (uint32_t)app->product_count, my_app_product_list_callback, app);
     }
 }
 
@@ -1514,12 +1412,8 @@ bool my_app_scene_product_list_on_event(void* context, SceneManagerEvent event) 
     }
     return consumed;
 }
-
 void my_app_scene_product_list_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Produkt-Aktionen
- * ===================================================================== */
 void my_app_scene_product_actions_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->product_actions_menu);
@@ -1527,15 +1421,11 @@ void my_app_scene_product_actions_on_enter(void* context) {
         submenu_set_header(app->product_actions_menu, app->products[app->editing_product_index].name);
 
     if(app->product_list_mode == ProductListModeDay) {
-        submenu_add_item(app->product_actions_menu, "Bestand aufnehmen",
-                         MyAppProductActionsIndexCount, my_app_product_actions_callback, app);
-        submenu_add_item(app->product_actions_menu, "Nachfuellen",
-                         MyAppProductActionsIndexRefill, my_app_product_actions_callback, app);
+        submenu_add_item(app->product_actions_menu, "Bestand aufnehmen", MyAppProductActionsIndexCount, my_app_product_actions_callback, app);
+        submenu_add_item(app->product_actions_menu, "Nachfuellen", MyAppProductActionsIndexRefill, my_app_product_actions_callback, app);
     } else {
-        submenu_add_item(app->product_actions_menu, "Umbenennen",
-                         MyAppProductActionsIndexRename, my_app_product_actions_callback, app);
-        submenu_add_item(app->product_actions_menu, "Loeschen",
-                         MyAppProductActionsIndexDelete, my_app_product_actions_callback, app);
+        submenu_add_item(app->product_actions_menu, "Umbenennen", MyAppProductActionsIndexRename, my_app_product_actions_callback, app);
+        submenu_add_item(app->product_actions_menu, "Loeschen", MyAppProductActionsIndexDelete, my_app_product_actions_callback, app);
     }
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewProductActions);
 }
@@ -1565,27 +1455,20 @@ bool my_app_scene_product_actions_on_event(void* context, SceneManagerEvent even
     }
     return consumed;
 }
-
 void my_app_scene_product_actions_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Produkt löschen bestätigen
- * ===================================================================== */
 void my_app_scene_product_delete_confirm_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->product_delete_confirm_menu);
     if(app->editing_product_index < app->product_count) {
         char h[80];
-        snprintf(h, sizeof(h), "Loeschen: %s?",
-                 app->products[app->editing_product_index].name);
+        snprintf(h, sizeof(h), "Loeschen: %s?", app->products[app->editing_product_index].name);
         submenu_set_header(app->product_delete_confirm_menu, h);
     } else {
         submenu_set_header(app->product_delete_confirm_menu, "Loeschen?");
     }
-    submenu_add_item(app->product_delete_confirm_menu, "Ja, loeschen",
-                     MyAppProductDeleteConfirmIndexYes, my_app_product_delete_confirm_callback, app);
-    submenu_add_item(app->product_delete_confirm_menu, "Nein",
-                     MyAppProductDeleteConfirmIndexNo, my_app_product_delete_confirm_callback, app);
+    submenu_add_item(app->product_delete_confirm_menu, "Ja, loeschen", MyAppProductDeleteConfirmIndexYes, my_app_product_delete_confirm_callback, app);
+    submenu_add_item(app->product_delete_confirm_menu, "Nein", MyAppProductDeleteConfirmIndexNo, my_app_product_delete_confirm_callback, app);
     submenu_set_selected_item(app->product_delete_confirm_menu, MyAppProductDeleteConfirmIndexNo);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewProductDeleteConfirm);
 }
@@ -1603,8 +1486,7 @@ bool my_app_scene_product_delete_confirm_on_event(void* context, SceneManagerEve
                 if(app->product_list_mode == ProductListModeMesseEdit) save_messe(app);
                 haptic_tap(app);
             }
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                             MyAppSceneProductList);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneProductList);
             consumed = true;
         } else if(event.event == MyAppProductDeleteConfirmIndexNo) {
             scene_manager_previous_scene(app->scene_manager);
@@ -1613,20 +1495,14 @@ bool my_app_scene_product_delete_confirm_on_event(void* context, SceneManagerEve
     }
     return consumed;
 }
-
 void my_app_scene_product_delete_confirm_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Bestätigung Tag beenden
- * ===================================================================== */
 void my_app_scene_confirm_end_day_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->confirm_end_day_menu);
     submenu_set_header(app->confirm_end_day_menu, "Tag wirklich beenden?");
-    submenu_add_item(app->confirm_end_day_menu, "Ja, Tag beenden",
-                     MyAppConfirmEndDayIndexYes, my_app_confirm_end_day_callback, app);
-    submenu_add_item(app->confirm_end_day_menu, "Nein, abbrechen",
-                     MyAppConfirmEndDayIndexNo, my_app_confirm_end_day_callback, app);
+    submenu_add_item(app->confirm_end_day_menu, "Ja, Tag beenden", MyAppConfirmEndDayIndexYes, my_app_confirm_end_day_callback, app);
+    submenu_add_item(app->confirm_end_day_menu, "Nein, abbrechen", MyAppConfirmEndDayIndexNo, my_app_confirm_end_day_callback, app);
     submenu_set_selected_item(app->confirm_end_day_menu, MyAppConfirmEndDayIndexNo);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewConfirmEndDay);
 }
@@ -1646,12 +1522,8 @@ bool my_app_scene_confirm_end_day_on_event(void* context, SceneManagerEvent even
     }
     return consumed;
 }
-
 void my_app_scene_confirm_end_day_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Popup
- * ===================================================================== */
 void my_app_scene_popup_on_enter(void* context) {
     MyApp* app = context;
     popup_reset(app->popup);
@@ -1665,11 +1537,8 @@ void my_app_scene_popup_on_enter(void* context) {
         const char* phone = app->current_customer_phone;
         char text[192];
         snprintf(text, sizeof(text), "#%04u\n%s\n%s\n%s\n%s",
-                 (unsigned)(app->next_customer_id - 1),
-                 name,
-                 company[0] ? company : "",
-                 email[0] ? email : "",
-                 phone[0] ? phone : "");
+                 (unsigned)(app->next_customer_id - 1), name,
+                 company[0] ? company : "", email[0] ? email : "", phone[0] ? phone : "");
         popup_set_header(app->popup, "Kunde gespeichert", 64, 3, AlignCenter, AlignTop);
         popup_set_text(app->popup, text, 5, 22, AlignLeft, AlignTop);
         break;
@@ -1685,8 +1554,7 @@ void my_app_scene_popup_on_enter(void* context) {
     case MyAppPopupKindMerchCountDone: {
         DateTime dt; furi_hal_rtc_get_datetime(&dt);
         char text[64];
-        snprintf(text, sizeof(text), "Bestand gesichert\num %02u:%02u",
-                 (unsigned)dt.hour, (unsigned)dt.minute);
+        snprintf(text, sizeof(text), "Bestand gesichert\num %02u:%02u", (unsigned)dt.hour, (unsigned)dt.minute);
         popup_set_header(app->popup, "Fertig", 64, 3, AlignCenter, AlignTop);
         popup_set_text(app->popup, text, 5, 22, AlignLeft, AlignTop);
         break;
@@ -1694,8 +1562,7 @@ void my_app_scene_popup_on_enter(void* context) {
     case MyAppPopupKindMerchRefillDone: {
         DateTime dt; furi_hal_rtc_get_datetime(&dt);
         char text[64];
-        snprintf(text, sizeof(text), "Nachfuellen fertig\num %02u:%02u",
-                 (unsigned)dt.hour, (unsigned)dt.minute);
+        snprintf(text, sizeof(text), "Nachfuellen fertig\num %02u:%02u", (unsigned)dt.hour, (unsigned)dt.minute);
         popup_set_header(app->popup, "Fertig", 64, 3, AlignCenter, AlignTop);
         popup_set_text(app->popup, text, 5, 22, AlignLeft, AlignTop);
         break;
@@ -1713,8 +1580,8 @@ void my_app_scene_popup_on_enter(void* context) {
         popup_set_text(app->popup, "Messe hat keine\nProdukte. Erst in\nEinstellungen pflegen.", 5, 22, AlignLeft, AlignTop);
         break;
     case MyAppPopupKindNoMessen:
-        popup_set_header(app->popup, "Hinweis", 64, 3, AlignCenter, AlignTop);
-        popup_set_text(app->popup, "Keine Messe vorhanden.\nBitte in Einstellungen\nanlegen.", 5, 22, AlignLeft, AlignTop);
+        popup_set_header(app->popup, "Achtung", 64, 3, AlignCenter, AlignTop);
+        popup_set_text(app->popup, "Keine Messe vorhanden.\nBitte erst in den\nEinstellungen anlegen.", 5, 22, AlignLeft, AlignTop);
         break;
     case MyAppPopupKindMesseNameExists:
         popup_set_header(app->popup, "Fehler", 64, 3, AlignCenter, AlignTop);
@@ -1730,8 +1597,7 @@ void my_app_scene_popup_on_enter(void* context) {
         break;
     case MyAppPopupKindRefillBelowCurrent:
         popup_set_header(app->popup, "Hinweis", 64, 3, AlignCenter, AlignTop);
-        popup_set_text(app->popup, "Wert kleiner als\naktueller Bestand.\nNicht uebernommen.",
-                       5, 22, AlignLeft, AlignTop);
+        popup_set_text(app->popup, "Wert kleiner als\naktueller Bestand.\nNicht uebernommen.", 5, 22, AlignLeft, AlignTop);
         break;
     case MyAppPopupKindUsbInfo:
         popup_set_header(app->popup, "USB / SD", 64, 3, AlignCenter, AlignTop);
@@ -1749,8 +1615,7 @@ bool my_app_scene_popup_on_event(void* context, SceneManagerEvent event) {
     MyApp* app = context;
     if(event.type == SceneManagerEventTypeBack) {
         if(app->popup_kind == MyAppPopupKindCustomerSaved) {
-            if(!scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                                  MyAppSceneDayMenu))
+            if(!scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneDayMenu))
                 scene_manager_previous_scene(app->scene_manager);
             return true;
         }
@@ -1766,22 +1631,15 @@ bool my_app_scene_popup_on_event(void* context, SceneManagerEvent event) {
     }
     return false;
 }
-
 void my_app_scene_popup_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Einstellungen
- * ===================================================================== */
 void my_app_scene_settings_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->settings_menu);
     submenu_set_header(app->settings_menu, "Einstellungen");
-    submenu_add_item(app->settings_menu, "Messen verwalten",
-                     MyAppSettingsIndexManageMessen, my_app_settings_callback, app);
-    submenu_add_item(app->settings_menu, "Kategorien bearbeiten",
-                     MyAppSettingsIndexEditCategories, my_app_settings_callback, app);
-    submenu_add_item(app->settings_menu, "USB / SD-Info",
-                     MyAppSettingsIndexUsbInfo, my_app_settings_callback, app);
+    submenu_add_item(app->settings_menu, "Messen verwalten", MyAppSettingsIndexManageMessen, my_app_settings_callback, app);
+    submenu_add_item(app->settings_menu, "Kategorien bearbeiten", MyAppSettingsIndexEditCategories, my_app_settings_callback, app);
+    submenu_add_item(app->settings_menu, "USB / SD-Info", MyAppSettingsIndexUsbInfo, my_app_settings_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewSettings);
 }
 
@@ -1806,12 +1664,8 @@ bool my_app_scene_settings_on_event(void* context, SceneManagerEvent event) {
     }
     return consumed;
 }
-
 void my_app_scene_settings_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Messe-Liste
- * ===================================================================== */
 void my_app_scene_messe_list_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->messe_list_menu);
@@ -1819,10 +1673,8 @@ void my_app_scene_messe_list_on_enter(void* context) {
 
     list_messen(app);
     for(size_t i = 0; i < app->messen_count; i++)
-        submenu_add_item(app->messe_list_menu, app->messen_display[i], (uint32_t)i,
-                         my_app_messe_list_callback, app);
-    submenu_add_item(app->messe_list_menu, "+ Neue Messe",
-                     (uint32_t)app->messen_count, my_app_messe_list_callback, app);
+        submenu_add_item(app->messe_list_menu, app->messen_display[i], (uint32_t)i, my_app_messe_list_callback, app);
+    submenu_add_item(app->messe_list_menu, "+ Neue Messe", (uint32_t)app->messen_count, my_app_messe_list_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMesseList);
 }
 
@@ -1833,8 +1685,8 @@ bool my_app_scene_messe_list_on_event(void* context, SceneManagerEvent event) {
         if(event.event < app->messen_count) {
             app->editing_messe_index = event.event;
             safe_copy(app->pending_messe_name, app->messen[event.event], MESSE_NAME_LEN);
-            safe_copy(app->pending_messe_display, app->messen_display[event.event],
-                      MESSE_DISPLAY_LEN);
+            safe_copy(app->pending_messe_display, app->messen_display[event.event], MESSE_DISPLAY_LEN);
+            app->pending_messe_id = app->messen_ids[event.event];
             scene_manager_next_scene(app->scene_manager, MyAppSceneMesseActions);
             consumed = true;
         } else {
@@ -1846,22 +1698,15 @@ bool my_app_scene_messe_list_on_event(void* context, SceneManagerEvent event) {
     }
     return consumed;
 }
-
 void my_app_scene_messe_list_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Messe-Aktionen
- * ===================================================================== */
 void my_app_scene_messe_actions_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->messe_actions_menu);
     submenu_set_header(app->messe_actions_menu, app->pending_messe_display);
-    submenu_add_item(app->messe_actions_menu, "Produkte bearbeiten",
-                     MyAppMesseActionsIndexEditProducts, my_app_messe_actions_callback, app);
-    submenu_add_item(app->messe_actions_menu, "Umbenennen",
-                     MyAppMesseActionsIndexRename, my_app_messe_actions_callback, app);
-    submenu_add_item(app->messe_actions_menu, "Loeschen",
-                     MyAppMesseActionsIndexDelete, my_app_messe_actions_callback, app);
+    submenu_add_item(app->messe_actions_menu, "Produkte bearbeiten", MyAppMesseActionsIndexEditProducts, my_app_messe_actions_callback, app);
+    submenu_add_item(app->messe_actions_menu, "Umbenennen", MyAppMesseActionsIndexRename, my_app_messe_actions_callback, app);
+    submenu_add_item(app->messe_actions_menu, "Loeschen", MyAppMesseActionsIndexDelete, my_app_messe_actions_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMesseActions);
 }
 
@@ -1886,24 +1731,16 @@ bool my_app_scene_messe_actions_on_event(void* context, SceneManagerEvent event)
     }
     return consumed;
 }
-
 void my_app_scene_messe_actions_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Messe löschen bestätigen
- * ===================================================================== */
 void my_app_scene_messe_delete_confirm_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->messe_delete_confirm_menu);
     char h[MESSE_DISPLAY_LEN + 20];
     snprintf(h, sizeof(h), "Loeschen: %s?", app->pending_messe_display);
     submenu_set_header(app->messe_delete_confirm_menu, h);
-    submenu_add_item(app->messe_delete_confirm_menu, "Ja, loeschen",
-                     MyAppMesseDeleteConfirmIndexYes,
-                     my_app_messe_delete_confirm_callback, app);
-    submenu_add_item(app->messe_delete_confirm_menu, "Nein",
-                     MyAppMesseDeleteConfirmIndexNo,
-                     my_app_messe_delete_confirm_callback, app);
+    submenu_add_item(app->messe_delete_confirm_menu, "Ja, loeschen", MyAppMesseDeleteConfirmIndexYes, my_app_messe_delete_confirm_callback, app);
+    submenu_add_item(app->messe_delete_confirm_menu, "Nein", MyAppMesseDeleteConfirmIndexNo, my_app_messe_delete_confirm_callback, app);
     submenu_set_selected_item(app->messe_delete_confirm_menu, MyAppMesseDeleteConfirmIndexNo);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewMesseDeleteConfirm);
 }
@@ -1916,9 +1753,9 @@ bool my_app_scene_messe_delete_confirm_on_event(void* context, SceneManagerEvent
             delete_messe(app->pending_messe_name);
             app->pending_messe_name[0] = '\0';
             app->pending_messe_display[0] = '\0';
+            app->pending_messe_id = 0;
             haptic_tap(app);
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                             MyAppSceneMesseList);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneMesseList);
             consumed = true;
         } else if(event.event == MyAppMesseDeleteConfirmIndexNo) {
             scene_manager_previous_scene(app->scene_manager);
@@ -1927,21 +1764,15 @@ bool my_app_scene_messe_delete_confirm_on_event(void* context, SceneManagerEvent
     }
     return consumed;
 }
-
 void my_app_scene_messe_delete_confirm_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Kategorien bearbeiten
- * ===================================================================== */
 void my_app_scene_edit_categories_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->edit_categories_menu);
     submenu_set_header(app->edit_categories_menu, "Kategorien");
     for(size_t i = 0; i < app->category_count; i++)
-        submenu_add_item(app->edit_categories_menu, app->categories[i], (uint32_t)i,
-                         my_app_edit_categories_callback, app);
-    submenu_add_item(app->edit_categories_menu, "+ Neue Kategorie",
-                     (uint32_t)app->category_count, my_app_edit_categories_callback, app);
+        submenu_add_item(app->edit_categories_menu, app->categories[i], (uint32_t)i, my_app_edit_categories_callback, app);
+    submenu_add_item(app->edit_categories_menu, "+ Neue Kategorie", (uint32_t)app->category_count, my_app_edit_categories_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewEditCategories);
 }
 
@@ -1962,20 +1793,14 @@ bool my_app_scene_edit_categories_on_event(void* context, SceneManagerEvent even
     }
     return consumed;
 }
-
 void my_app_scene_edit_categories_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Kategorie-Aktionen
- * ===================================================================== */
 void my_app_scene_category_actions_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->category_actions_menu);
     submenu_set_header(app->category_actions_menu, app->categories[app->editing_category_index]);
-    submenu_add_item(app->category_actions_menu, "Bearbeiten",
-                     MyAppCategoryActionsIndexEdit, my_app_category_actions_callback, app);
-    submenu_add_item(app->category_actions_menu, "Loeschen",
-                     MyAppCategoryActionsIndexDelete, my_app_category_actions_callback, app);
+    submenu_add_item(app->category_actions_menu, "Bearbeiten", MyAppCategoryActionsIndexEdit, my_app_category_actions_callback, app);
+    submenu_add_item(app->category_actions_menu, "Loeschen", MyAppCategoryActionsIndexDelete, my_app_category_actions_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewCategoryActions);
 }
 
@@ -1994,24 +1819,16 @@ bool my_app_scene_category_actions_on_event(void* context, SceneManagerEvent eve
     }
     return consumed;
 }
-
 void my_app_scene_category_actions_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: Kategorie löschen bestätigen
- * ===================================================================== */
 void my_app_scene_category_delete_confirm_on_enter(void* context) {
     MyApp* app = context;
     submenu_reset(app->category_delete_confirm_menu);
     char h[CATEGORY_LEN + 20];
     snprintf(h, sizeof(h), "Loeschen: %s?", app->categories[app->editing_category_index]);
     submenu_set_header(app->category_delete_confirm_menu, h);
-    submenu_add_item(app->category_delete_confirm_menu, "Ja, loeschen",
-                     MyAppCategoryDeleteConfirmIndexYes,
-                     my_app_category_delete_confirm_callback, app);
-    submenu_add_item(app->category_delete_confirm_menu, "Nein",
-                     MyAppCategoryDeleteConfirmIndexNo,
-                     my_app_category_delete_confirm_callback, app);
+    submenu_add_item(app->category_delete_confirm_menu, "Ja, loeschen", MyAppCategoryDeleteConfirmIndexYes, my_app_category_delete_confirm_callback, app);
+    submenu_add_item(app->category_delete_confirm_menu, "Nein", MyAppCategoryDeleteConfirmIndexNo, my_app_category_delete_confirm_callback, app);
     submenu_set_selected_item(app->category_delete_confirm_menu, MyAppCategoryDeleteConfirmIndexNo);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewCategoryDeleteConfirm);
 }
@@ -2021,13 +1838,14 @@ bool my_app_scene_category_delete_confirm_on_event(void* context, SceneManagerEv
     bool consumed = false;
     if(event.type == SceneManagerEventTypeCustom) {
         if(event.event == MyAppCategoryDeleteConfirmIndexYes) {
-            for(size_t i = app->editing_category_index; i + 1 < app->category_count; i++)
+            for(size_t i = app->editing_category_index; i + 1 < app->category_count; i++) {
                 safe_copy(app->categories[i], app->categories[i + 1], CATEGORY_LEN);
+                app->category_ids[i] = app->category_ids[i + 1];
+            }
             if(app->category_count > 0) app->category_count--;
             save_categories(app);
             haptic_tap(app);
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                             MyAppSceneEditCategories);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneEditCategories);
             consumed = true;
         } else if(event.event == MyAppCategoryDeleteConfirmIndexNo) {
             scene_manager_previous_scene(app->scene_manager);
@@ -2036,19 +1854,14 @@ bool my_app_scene_category_delete_confirm_on_event(void* context, SceneManagerEv
     }
     return consumed;
 }
-
 void my_app_scene_category_delete_confirm_on_exit(void* context) { UNUSED(context); }
 
-/* =====================================================================
- *  SZENE: TextInput
- * ===================================================================== */
 void my_app_scene_text_input_on_enter(void* context) {
     MyApp* app = context;
     app->text_input_header[0] = '\0';
     const char* header = "Eingabe:";
     bool clear_default = true;
 
-    /* Numerische Eingaben: Buffer immer frisch, auch nach Popup-Rücksprung */
     switch(app->text_input_purpose) {
     case MyAppTextInputPurposeMerchCountBulk:
     case MyAppTextInputPurposeMerchRefillBulk:
@@ -2065,80 +1878,56 @@ void my_app_scene_text_input_on_enter(void* context) {
         header = "Tag (Datum):";
         clear_default = false;
         break;
-    case MyAppTextInputPurposeCustomerName:
-        header = "Name (leer=Anonym):";
-        break;
-    case MyAppTextInputPurposeCustomerCompany:
-        header = "Firma:";
-        break;
-    case MyAppTextInputPurposeCustomerEmail:
-        header = "E-Mail:";
-        break;
-    case MyAppTextInputPurposeCustomerPhone:
-        header = "Telefon:";
-        break;
-    case MyAppTextInputPurposeCustomerDesc:
-        header = "Notiz (optional):";
-        break;
-    case MyAppTextInputPurposeNewCategory:
-        header = "Neue Kategorie:";
-        break;
+    case MyAppTextInputPurposeCustomerName: header = "Name (leer=Anonym):"; break;
+    case MyAppTextInputPurposeCustomerCompany: header = "Firma:"; break;
+    case MyAppTextInputPurposeCustomerEmail: header = "E-Mail:"; break;
+    case MyAppTextInputPurposeCustomerPhone: header = "Telefon:"; break;
+    case MyAppTextInputPurposeCustomerDesc: header = "Notiz (optional):"; break;
+    case MyAppTextInputPurposeNewCategory: header = "Neue Kategorie:"; break;
     case MyAppTextInputPurposeEditCategory:
         header = "Kategorie:";
         clear_default = false;
         safe_copy(app->text_buffer, app->categories[app->editing_category_index], TEXT_BUF_LEN);
         break;
-    case MyAppTextInputPurposeEndDayConfirm:
-        header = "Zum Beenden 'ENDE' eingeben:";
-        break;
+    case MyAppTextInputPurposeEndDayConfirm: header = "Zum Beenden 'ENDE' eingeben:"; break;
     case MyAppTextInputPurposeMerchCountBulk:
         if(app->merch_bulk_index < app->product_count)
-            snprintf(app->text_input_header, HEADER_BUF_LEN, "Bestand: %s",
-                     app->products[app->merch_bulk_index].name);
+            snprintf(app->text_input_header, HEADER_BUF_LEN, "Bestand: %s", app->products[app->merch_bulk_index].name);
         else safe_copy(app->text_input_header, "Bestand:", HEADER_BUF_LEN);
         header = app->text_input_header;
         break;
     case MyAppTextInputPurposeMerchRefillBulk:
         if(app->merch_bulk_index < app->product_count)
-            snprintf(app->text_input_header, HEADER_BUF_LEN, "Neu: %s",
-                     app->products[app->merch_bulk_index].name);
+            snprintf(app->text_input_header, HEADER_BUF_LEN, "Neu: %s", app->products[app->merch_bulk_index].name);
         else safe_copy(app->text_input_header, "Neu:", HEADER_BUF_LEN);
         header = app->text_input_header;
         break;
     case MyAppTextInputPurposeMerchInitialBulk:
         if(app->merch_bulk_index < app->product_count)
-            snprintf(app->text_input_header, HEADER_BUF_LEN, "Start: %s",
-                     app->products[app->merch_bulk_index].name);
+            snprintf(app->text_input_header, HEADER_BUF_LEN, "Start: %s", app->products[app->merch_bulk_index].name);
         else safe_copy(app->text_input_header, "Start:", HEADER_BUF_LEN);
         header = app->text_input_header;
         break;
     case MyAppTextInputPurposeMerchCountSingle:
         if(app->editing_product_index < app->product_count)
-            snprintf(app->text_input_header, HEADER_BUF_LEN, "Bestand: %s",
-                     app->products[app->editing_product_index].name);
+            snprintf(app->text_input_header, HEADER_BUF_LEN, "Bestand: %s", app->products[app->editing_product_index].name);
         else safe_copy(app->text_input_header, "Bestand:", HEADER_BUF_LEN);
         header = app->text_input_header;
         break;
     case MyAppTextInputPurposeMerchRefillSingle:
         if(app->editing_product_index < app->product_count)
-            snprintf(app->text_input_header, HEADER_BUF_LEN, "Neu: %s",
-                     app->products[app->editing_product_index].name);
+            snprintf(app->text_input_header, HEADER_BUF_LEN, "Neu: %s", app->products[app->editing_product_index].name);
         else safe_copy(app->text_input_header, "Neu:", HEADER_BUF_LEN);
         header = app->text_input_header;
         break;
-    case MyAppTextInputPurposeMerchNewName:
-        header = "Produktname:";
-        break;
+    case MyAppTextInputPurposeMerchNewName: header = "Produktname:"; break;
     case MyAppTextInputPurposeMerchEditName:
         header = "Neuer Name:";
         clear_default = false;
         if(app->editing_product_index < app->product_count)
-            safe_copy(app->text_buffer,
-                      app->products[app->editing_product_index].name, TEXT_BUF_LEN);
+            safe_copy(app->text_buffer, app->products[app->editing_product_index].name, TEXT_BUF_LEN);
         break;
-    case MyAppTextInputPurposeNewMesseName:
-        header = "Messe-Name:";
-        break;
+    case MyAppTextInputPurposeNewMesseName: header = "Messe-Name:"; break;
     case MyAppTextInputPurposeRenameMesse:
         header = "Neuer Messe-Name:";
         clear_default = false;
@@ -2147,8 +1936,7 @@ void my_app_scene_text_input_on_enter(void* context) {
     }
 
     text_input_reset(app->text_input);
-    text_input_set_result_callback(app->text_input, my_app_text_input_callback, app,
-                                   app->text_buffer, TEXT_BUF_LEN, clear_default);
+    text_input_set_result_callback(app->text_input, my_app_text_input_callback, app, app->text_buffer, TEXT_BUF_LEN, clear_default);
     text_input_set_header_text(app->text_input, header);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewTextInput);
 }
@@ -2158,8 +1946,7 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
     bool consumed = false;
 
     if(event.type == SceneManagerEventTypeBack) {
-        if(app->text_input_purpose == MyAppTextInputPurposeMerchCountBulk ||
-           app->text_input_purpose == MyAppTextInputPurposeMerchRefillBulk) {
+        if(app->text_input_purpose == MyAppTextInputPurposeMerchCountBulk || app->text_input_purpose == MyAppTextInputPurposeMerchRefillBulk) {
             app->merch_bulk_mode = MerchBulkNone;
             app->merch_bulk_index = 0;
             app->pending_merch_bulk_continue = false;
@@ -2169,15 +1956,13 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
             app->current_messe[0] = '\0';
             app->merch_bulk_mode = MerchBulkNone;
             app->merch_bulk_index = 0;
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                             MyAppSceneMainMenu);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneMainMenu);
             return true;
         }
         return false;
     }
 
-    if(event.type == SceneManagerEventTypeCustom &&
-       event.event == CUSTOM_EVENT_TEXT_INPUT_DONE) {
+    if(event.type == SceneManagerEventTypeCustom && event.event == CUSTOM_EVENT_TEXT_INPUT_DONE) {
         switch(app->text_input_purpose) {
         case MyAppTextInputPurposeDayName: {
             char sanitized[DAY_NAME_LEN];
@@ -2197,60 +1982,57 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
             scene_manager_next_scene(app->scene_manager, MyAppSceneMesseSelect);
             break;
         }
-
         case MyAppTextInputPurposeCustomerName:
             safe_copy(app->current_customer, app->text_buffer, CUSTOMER_NAME_LEN);
             app->text_input_purpose = MyAppTextInputPurposeCustomerCompany;
             app->text_buffer[0] = '\0';
             scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
             break;
-
         case MyAppTextInputPurposeCustomerCompany:
             safe_copy(app->current_customer_company, app->text_buffer, CUSTOMER_COMPANY_LEN);
             app->text_input_purpose = MyAppTextInputPurposeCustomerEmail;
             app->text_buffer[0] = '\0';
             scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
             break;
-
         case MyAppTextInputPurposeCustomerEmail:
             safe_copy(app->current_customer_email, app->text_buffer, CUSTOMER_EMAIL_LEN);
             app->text_input_purpose = MyAppTextInputPurposeCustomerPhone;
             app->text_buffer[0] = '\0';
             scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
             break;
-
         case MyAppTextInputPurposeCustomerPhone:
             safe_copy(app->current_customer_phone, app->text_buffer, CUSTOMER_PHONE_LEN);
             app->text_input_purpose = MyAppTextInputPurposeCustomerDesc;
             app->text_buffer[0] = '\0';
             scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
             break;
-
         case MyAppTextInputPurposeCustomerDesc:
             safe_copy(app->current_customer_desc, app->text_buffer, CUSTOMER_DESC_LEN);
             scene_manager_next_scene(app->scene_manager, MyAppSceneCustomerCategory);
             break;
-
         case MyAppTextInputPurposeEndDayConfirm:
             if(str_equals_ignore_case(app->text_buffer, "ENDE"))
                 scene_manager_next_scene(app->scene_manager, MyAppSceneConfirmEndDay);
             else
-                scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                                  MyAppSceneDayMenu);
+                scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneDayMenu);
             break;
-
         case MyAppTextInputPurposeNewCategory:
             if(strlen(app->text_buffer) > 0 && app->category_count < MAX_CATEGORIES) {
                 char safe[CATEGORY_LEN];
                 sanitize_field(app->text_buffer, safe, sizeof(safe));
                 safe_copy(app->categories[app->category_count], safe, CATEGORY_LEN);
+
+                uint16_t max_id = 0;
+                for(size_t i=0; i<app->category_count; i++)
+                    if(app->category_ids[i] > max_id) max_id = app->category_ids[i];
+                app->category_ids[app->category_count] = max_id + 1;
+
                 app->category_count++;
                 save_categories(app);
                 haptic_tap(app);
             }
             scene_manager_previous_scene(app->scene_manager);
             break;
-
         case MyAppTextInputPurposeEditCategory:
             if(strlen(app->text_buffer) > 0) {
                 char safe[CATEGORY_LEN];
@@ -2259,10 +2041,8 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
                 save_categories(app);
                 haptic_tap(app);
             }
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                              MyAppSceneEditCategories);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneEditCategories);
             break;
-
         case MyAppTextInputPurposeMerchCountBulk: {
             uint16_t val = parse_uint16_clamped(app->text_buffer);
             merch_apply_count(app, app->merch_bulk_index, (int)val);
@@ -2271,8 +2051,7 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
         }
         case MyAppTextInputPurposeMerchRefillBulk: {
             uint16_t val = parse_uint16_clamped(app->text_buffer);
-            if(app->merch_bulk_index < app->product_count &&
-               val < app->products[app->merch_bulk_index].current) {
+            if(app->merch_bulk_index < app->product_count && val < app->products[app->merch_bulk_index].current) {
                 app->merch_bulk_mode = MerchBulkNone;
                 app->merch_bulk_index = 0;
                 app->pending_merch_bulk_continue = false;
@@ -2301,15 +2080,13 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
             }
             break;
         }
-
         case MyAppTextInputPurposeMerchCountSingle: {
             uint16_t val = parse_uint16_clamped(app->text_buffer);
             merch_apply_count(app, app->editing_product_index, (int)val);
             if(app->merch_add_new_flow) {
                 app->merch_add_new_flow = false;
                 if(app->product_list_mode == ProductListModeMesseEdit) save_messe(app);
-                scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                                  MyAppSceneProductList);
+                scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneProductList);
             } else {
                 scene_manager_previous_scene(app->scene_manager);
             }
@@ -2317,8 +2094,7 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
         }
         case MyAppTextInputPurposeMerchRefillSingle: {
             uint16_t val = parse_uint16_clamped(app->text_buffer);
-            if(app->editing_product_index < app->product_count &&
-               val < app->products[app->editing_product_index].current) {
+            if(app->editing_product_index < app->product_count && val < app->products[app->editing_product_index].current) {
                 app->popup_kind = MyAppPopupKindRefillBelowCurrent;
                 app->popup_has_return = false;
                 scene_manager_next_scene(app->scene_manager, MyAppScenePopup);
@@ -2336,7 +2112,6 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
                 sanitize_field(app->text_buffer, safe, sizeof(safe));
                 safe_copy(p->name, safe, PRODUCT_NAME_LEN);
                 app->product_count++;
-
                 if(app->product_list_mode == ProductListModeMesseEdit) {
                     save_messe(app);
                     haptic_tap(app);
@@ -2354,8 +2129,7 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
             }
             break;
         case MyAppTextInputPurposeMerchEditName:
-            if(strlen(app->text_buffer) > 0 &&
-               app->editing_product_index < app->product_count) {
+            if(strlen(app->text_buffer) > 0 && app->editing_product_index < app->product_count) {
                 MerchProduct* p = &app->products[app->editing_product_index];
                 char safe[PRODUCT_NAME_LEN];
                 sanitize_field(app->text_buffer, safe, sizeof(safe));
@@ -2367,10 +2141,8 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
                 }
                 haptic_tap(app);
             }
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                              MyAppSceneProductList);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneProductList);
             break;
-
         case MyAppTextInputPurposeNewMesseName: {
             char sanitized[MESSE_NAME_LEN];
             if(!sanitize_name(app->text_buffer, sanitized, sizeof(sanitized))) {
@@ -2389,6 +2161,14 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
             char safe_disp[MESSE_DISPLAY_LEN];
             sanitize_field(app->text_buffer, safe_disp, sizeof(safe_disp));
             safe_copy(app->pending_messe_display, safe_disp, MESSE_DISPLAY_LEN);
+
+            uint16_t max_id = 0;
+            list_messen(app);
+            for(size_t i = 0; i < app->messen_count; i++) {
+                if(app->messen_ids[i] > max_id) max_id = app->messen_ids[i];
+            }
+            app->pending_messe_id = max_id + 1;
+
             app->product_count = 0;
             save_messe(app);
             haptic_tap(app);
@@ -2405,11 +2185,9 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
             safe_copy(app->pending_messe_display, safe_disp, MESSE_DISPLAY_LEN);
             save_messe(app);
             haptic_tap(app);
-            scene_manager_search_and_switch_to_previous_scene(app->scene_manager,
-                                                              MyAppSceneMesseList);
+            scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneMesseList);
             break;
         }
-
         default:
             scene_manager_previous_scene(app->scene_manager);
             break;
@@ -2418,15 +2196,12 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
     }
     return consumed;
 }
-
 void my_app_scene_text_input_on_exit(void* context) { UNUSED(context); }
 
 /* =====================================================================
  *  Callbacks
  * ===================================================================== */
-static void send_event(MyApp* app, uint32_t index) {
-    view_dispatcher_send_custom_event(app->view_dispatcher, index);
-}
+static void send_event(MyApp* app, uint32_t index) { view_dispatcher_send_custom_event(app->view_dispatcher, index); }
 static void my_app_main_menu_callback(void* c, uint32_t i) { send_event(c, i); }
 static void my_app_day_menu_callback(void* c, uint32_t i) { send_event(c, i); }
 static void my_app_customer_category_callback(void* c, uint32_t i) { send_event(c, i); }
@@ -2445,7 +2220,6 @@ static void my_app_messe_list_callback(void* c, uint32_t i) { send_event(c, i); 
 static void my_app_messe_actions_callback(void* c, uint32_t i) { send_event(c, i); }
 static void my_app_messe_delete_confirm_callback(void* c, uint32_t i) { send_event(c, i); }
 static void my_app_category_delete_confirm_callback(void* c, uint32_t i) { send_event(c, i); }
-
 static void my_app_text_input_callback(void* context) {
     MyApp* app = context;
     view_dispatcher_send_custom_event(app->view_dispatcher, CUSTOM_EVENT_TEXT_INPUT_DONE);
@@ -2455,79 +2229,35 @@ static void my_app_text_input_callback(void* context) {
  *  SceneManager Tabellen
  * ===================================================================== */
 static const AppSceneOnEnterCallback my_app_scene_on_enter_handlers[] = {
-    my_app_scene_main_menu_on_enter,
-    my_app_scene_day_menu_on_enter,
-    my_app_scene_customer_category_on_enter,
-    my_app_scene_settings_on_enter,
-    my_app_scene_edit_categories_on_enter,
-    my_app_scene_category_actions_on_enter,
-    my_app_scene_confirm_end_day_on_enter,
-    my_app_scene_confirm_toggle_on_enter,
-    my_app_scene_text_input_on_enter,
-    my_app_scene_popup_on_enter,
-    my_app_scene_merch_menu_on_enter,
-    my_app_scene_merch_after_count_on_enter,
-    my_app_scene_product_list_on_enter,
-    my_app_scene_product_actions_on_enter,
-    my_app_scene_product_delete_confirm_on_enter,
-    my_app_scene_messe_select_on_enter,
-    my_app_scene_messe_list_on_enter,
-    my_app_scene_messe_actions_on_enter,
-    my_app_scene_messe_delete_confirm_on_enter,
-    my_app_scene_category_delete_confirm_on_enter,
+    my_app_scene_main_menu_on_enter, my_app_scene_day_menu_on_enter, my_app_scene_customer_category_on_enter,
+    my_app_scene_settings_on_enter, my_app_scene_edit_categories_on_enter, my_app_scene_category_actions_on_enter,
+    my_app_scene_confirm_end_day_on_enter, my_app_scene_confirm_toggle_on_enter, my_app_scene_text_input_on_enter,
+    my_app_scene_popup_on_enter, my_app_scene_merch_menu_on_enter, my_app_scene_merch_after_count_on_enter,
+    my_app_scene_product_list_on_enter, my_app_scene_product_actions_on_enter, my_app_scene_product_delete_confirm_on_enter,
+    my_app_scene_messe_select_on_enter, my_app_scene_messe_list_on_enter, my_app_scene_messe_actions_on_enter,
+    my_app_scene_messe_delete_confirm_on_enter, my_app_scene_category_delete_confirm_on_enter,
 };
-
 static const AppSceneOnEventCallback my_app_scene_on_event_handlers[] = {
-    my_app_scene_main_menu_on_event,
-    my_app_scene_day_menu_on_event,
-    my_app_scene_customer_category_on_event,
-    my_app_scene_settings_on_event,
-    my_app_scene_edit_categories_on_event,
-    my_app_scene_category_actions_on_event,
-    my_app_scene_confirm_end_day_on_event,
-    my_app_scene_confirm_toggle_on_event,
-    my_app_scene_text_input_on_event,
-    my_app_scene_popup_on_event,
-    my_app_scene_merch_menu_on_event,
-    my_app_scene_merch_after_count_on_event,
-    my_app_scene_product_list_on_event,
-    my_app_scene_product_actions_on_event,
-    my_app_scene_product_delete_confirm_on_event,
-    my_app_scene_messe_select_on_event,
-    my_app_scene_messe_list_on_event,
-    my_app_scene_messe_actions_on_event,
-    my_app_scene_messe_delete_confirm_on_event,
-    my_app_scene_category_delete_confirm_on_event,
+    my_app_scene_main_menu_on_event, my_app_scene_day_menu_on_event, my_app_scene_customer_category_on_event,
+    my_app_scene_settings_on_event, my_app_scene_edit_categories_on_event, my_app_scene_category_actions_on_event,
+    my_app_scene_confirm_end_day_on_event, my_app_scene_confirm_toggle_on_event, my_app_scene_text_input_on_event,
+    my_app_scene_popup_on_event, my_app_scene_merch_menu_on_event, my_app_scene_merch_after_count_on_event,
+    my_app_scene_product_list_on_event, my_app_scene_product_actions_on_event, my_app_scene_product_delete_confirm_on_event,
+    my_app_scene_messe_select_on_event, my_app_scene_messe_list_on_event, my_app_scene_messe_actions_on_event,
+    my_app_scene_messe_delete_confirm_on_event, my_app_scene_category_delete_confirm_on_event,
 };
-
 static const AppSceneOnExitCallback my_app_scene_on_exit_handlers[] = {
-    my_app_scene_main_menu_on_exit,
-    my_app_scene_day_menu_on_exit,
-    my_app_scene_customer_category_on_exit,
-    my_app_scene_settings_on_exit,
-    my_app_scene_edit_categories_on_exit,
-    my_app_scene_category_actions_on_exit,
-    my_app_scene_confirm_end_day_on_exit,
-    my_app_scene_confirm_toggle_on_exit,
-    my_app_scene_text_input_on_exit,
-    my_app_scene_popup_on_exit,
-    my_app_scene_merch_menu_on_exit,
-    my_app_scene_merch_after_count_on_exit,
-    my_app_scene_product_list_on_exit,
-    my_app_scene_product_actions_on_exit,
-    my_app_scene_product_delete_confirm_on_exit,
-    my_app_scene_messe_select_on_exit,
-    my_app_scene_messe_list_on_exit,
-    my_app_scene_messe_actions_on_exit,
-    my_app_scene_messe_delete_confirm_on_exit,
-    my_app_scene_category_delete_confirm_on_exit,
+    my_app_scene_main_menu_on_exit, my_app_scene_day_menu_on_exit, my_app_scene_customer_category_on_exit,
+    my_app_scene_settings_on_exit, my_app_scene_edit_categories_on_exit, my_app_scene_category_actions_on_exit,
+    my_app_scene_confirm_end_day_on_exit, my_app_scene_confirm_toggle_on_exit, my_app_scene_text_input_on_exit,
+    my_app_scene_popup_on_exit, my_app_scene_merch_menu_on_exit, my_app_scene_merch_after_count_on_exit,
+    my_app_scene_product_list_on_exit, my_app_scene_product_actions_on_exit, my_app_scene_product_delete_confirm_on_exit,
+    my_app_scene_messe_select_on_exit, my_app_scene_messe_list_on_exit, my_app_scene_messe_actions_on_exit,
+    my_app_scene_messe_delete_confirm_on_exit, my_app_scene_category_delete_confirm_on_exit,
 };
-
 static const SceneManagerHandlers my_app_scene_manager_handlers = {
-    .on_enter_handlers = my_app_scene_on_enter_handlers,
-    .on_event_handlers = my_app_scene_on_event_handlers,
-    .on_exit_handlers = my_app_scene_on_exit_handlers,
-    .scene_num = MyAppSceneCount,
+    .on_enter_handlers = my_app_scene_on_enter_handlers, .on_event_handlers = my_app_scene_on_event_handlers,
+    .on_exit_handlers = my_app_scene_on_exit_handlers, .scene_num = MyAppSceneCount,
 };
 
 /* =====================================================================
@@ -2556,80 +2286,27 @@ static MyApp* my_app_alloc(void) {
     view_dispatcher_attach_to_gui(app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
     app->scene_manager = scene_manager_alloc(&my_app_scene_manager_handlers, app);
 
-    app->main_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMainMenu, submenu_get_view(app->main_menu));
+    app->main_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMainMenu, submenu_get_view(app->main_menu));
+    app->day_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewDayMenu, submenu_get_view(app->day_menu));
+    app->customer_category_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewCustomerCategory, submenu_get_view(app->customer_category_menu));
+    app->settings_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewSettings, submenu_get_view(app->settings_menu));
+    app->edit_categories_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewEditCategories, submenu_get_view(app->edit_categories_menu));
+    app->category_actions_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewCategoryActions, submenu_get_view(app->category_actions_menu));
+    app->confirm_end_day_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewConfirmEndDay, submenu_get_view(app->confirm_end_day_menu));
+    app->confirm_toggle_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewConfirmToggle, submenu_get_view(app->confirm_toggle_menu));
+    app->merch_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMerchMenu, submenu_get_view(app->merch_menu));
+    app->merch_after_count_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMerchAfterCount, submenu_get_view(app->merch_after_count_menu));
+    app->product_list_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewProductList, submenu_get_view(app->product_list_menu));
+    app->product_actions_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewProductActions, submenu_get_view(app->product_actions_menu));
+    app->product_delete_confirm_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewProductDeleteConfirm, submenu_get_view(app->product_delete_confirm_menu));
+    app->messe_select_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseSelect, submenu_get_view(app->messe_select_menu));
+    app->messe_list_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseList, submenu_get_view(app->messe_list_menu));
+    app->messe_actions_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseActions, submenu_get_view(app->messe_actions_menu));
+    app->messe_delete_confirm_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseDeleteConfirm, submenu_get_view(app->messe_delete_confirm_menu));
+    app->category_delete_confirm_menu = submenu_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewCategoryDeleteConfirm, submenu_get_view(app->category_delete_confirm_menu));
 
-    app->day_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewDayMenu, submenu_get_view(app->day_menu));
-
-    app->customer_category_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewCustomerCategory,
-                             submenu_get_view(app->customer_category_menu));
-
-    app->settings_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewSettings, submenu_get_view(app->settings_menu));
-
-    app->edit_categories_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewEditCategories,
-                             submenu_get_view(app->edit_categories_menu));
-
-    app->category_actions_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewCategoryActions,
-                             submenu_get_view(app->category_actions_menu));
-
-    app->confirm_end_day_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewConfirmEndDay,
-                             submenu_get_view(app->confirm_end_day_menu));
-
-    app->confirm_toggle_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewConfirmToggle,
-                             submenu_get_view(app->confirm_toggle_menu));
-
-    app->merch_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMerchMenu, submenu_get_view(app->merch_menu));
-
-    app->merch_after_count_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMerchAfterCount,
-                             submenu_get_view(app->merch_after_count_menu));
-
-    app->product_list_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewProductList,
-                             submenu_get_view(app->product_list_menu));
-
-    app->product_actions_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewProductActions,
-                             submenu_get_view(app->product_actions_menu));
-
-    app->product_delete_confirm_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewProductDeleteConfirm,
-                             submenu_get_view(app->product_delete_confirm_menu));
-
-    app->messe_select_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseSelect,
-                             submenu_get_view(app->messe_select_menu));
-
-    app->messe_list_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseList,
-                             submenu_get_view(app->messe_list_menu));
-
-    app->messe_actions_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseActions,
-                             submenu_get_view(app->messe_actions_menu));
-
-    app->messe_delete_confirm_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewMesseDeleteConfirm,
-                             submenu_get_view(app->messe_delete_confirm_menu));
-
-    app->category_delete_confirm_menu = submenu_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewCategoryDeleteConfirm,
-                             submenu_get_view(app->category_delete_confirm_menu));
-
-    app->text_input = text_input_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewTextInput,
-                             text_input_get_view(app->text_input));
-
-    app->popup = popup_alloc();
-    view_dispatcher_add_view(app->view_dispatcher, MyAppViewPopup, popup_get_view(app->popup));
+    app->text_input = text_input_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewTextInput, text_input_get_view(app->text_input));
+    app->popup = popup_alloc(); view_dispatcher_add_view(app->view_dispatcher, MyAppViewPopup, popup_get_view(app->popup));
 
     view_dispatcher_set_event_callback_context(app->view_dispatcher, app);
     view_dispatcher_set_custom_event_callback(app->view_dispatcher, my_app_custom_event_callback);
@@ -2639,46 +2316,26 @@ static MyApp* my_app_alloc(void) {
 }
 
 static void my_app_free(MyApp* app) {
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMainMenu);
-    submenu_free(app->main_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewDayMenu);
-    submenu_free(app->day_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewCustomerCategory);
-    submenu_free(app->customer_category_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewSettings);
-    submenu_free(app->settings_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewEditCategories);
-    submenu_free(app->edit_categories_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewCategoryActions);
-    submenu_free(app->category_actions_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewConfirmEndDay);
-    submenu_free(app->confirm_end_day_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewConfirmToggle);
-    submenu_free(app->confirm_toggle_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMerchMenu);
-    submenu_free(app->merch_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMerchAfterCount);
-    submenu_free(app->merch_after_count_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewProductList);
-    submenu_free(app->product_list_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewProductActions);
-    submenu_free(app->product_actions_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewProductDeleteConfirm);
-    submenu_free(app->product_delete_confirm_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseSelect);
-    submenu_free(app->messe_select_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseList);
-    submenu_free(app->messe_list_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseActions);
-    submenu_free(app->messe_actions_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseDeleteConfirm);
-    submenu_free(app->messe_delete_confirm_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewCategoryDeleteConfirm);
-    submenu_free(app->category_delete_confirm_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewTextInput);
-    text_input_free(app->text_input);
-    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewPopup);
-    popup_free(app->popup);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMainMenu); submenu_free(app->main_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewDayMenu); submenu_free(app->day_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewCustomerCategory); submenu_free(app->customer_category_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewSettings); submenu_free(app->settings_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewEditCategories); submenu_free(app->edit_categories_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewCategoryActions); submenu_free(app->category_actions_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewConfirmEndDay); submenu_free(app->confirm_end_day_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewConfirmToggle); submenu_free(app->confirm_toggle_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMerchMenu); submenu_free(app->merch_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMerchAfterCount); submenu_free(app->merch_after_count_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewProductList); submenu_free(app->product_list_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewProductActions); submenu_free(app->product_actions_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewProductDeleteConfirm); submenu_free(app->product_delete_confirm_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseSelect); submenu_free(app->messe_select_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseList); submenu_free(app->messe_list_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseActions); submenu_free(app->messe_actions_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewMesseDeleteConfirm); submenu_free(app->messe_delete_confirm_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewCategoryDeleteConfirm); submenu_free(app->category_delete_confirm_menu);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewTextInput); text_input_free(app->text_input);
+    view_dispatcher_remove_view(app->view_dispatcher, MyAppViewPopup); popup_free(app->popup);
 
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
@@ -2700,16 +2357,15 @@ int32_t messe_tracker_app(void* p) {
 
     if(load_state(app)) {
         if(!day_exists(app->current_day)) {
-            FURI_LOG_W(TAG, "State referenziert fehlenden Tag '%s', verwerfe State",
-                       app->current_day);
+            FURI_LOG_W(TAG, "State referenziert fehlenden Tag '%s', verwerfe State", app->current_day);
             clear_state();
             app->current_day[0] = '\0';
             app->current_messe[0] = '\0';
+            app->current_messe_id = 0;
             app->at_booth = false;
             app->next_customer_id = 1;
         } else {
-            FURI_LOG_I(TAG, "Aktiver Tag: %s (Messe: %s)",
-                       app->current_day, app->current_messe);
+            FURI_LOG_I(TAG, "Aktiver Tag: %s (Messe-ID: %u)", app->current_day, app->current_messe_id);
             load_day_products_from_log(app);
             app->pending_auto_open_day = true;
         }
