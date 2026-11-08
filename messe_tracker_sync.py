@@ -3,7 +3,8 @@
 messe_tracker_app.py
 ====================
 Die Master-Anwendung für den Messe Tracker.
-Der Laptop verwaltet die Datenbank, der Flipper liefert die Rohdaten.
+Der Laptop verwaltet die Datenbank, der Flipper liefert die Rohdaten
+und empfängt Konfigurations-Updates (Messen, Kategorien, Merch).
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import re
 import sqlite3
 import sys
 import time
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -78,15 +80,27 @@ QTabBar::tab:selected {{ background: {FLIPPER['accent']}; color: {FLIPPER['accen
 """
 
 
+def sanitize_name(name):
+    res = ""
+    for c in name:
+        if c.isalnum() or c in "-_":
+            res += c
+        elif c == " ":
+            res += "_"
+    return res if res else "Messe"
+
+
 class Database:
     def __init__(self, path):
-        self.conn = sqlite3.connect(str(path))
+        # WICHTIG: check_same_thread=False erlaubt den Zugriff aus dem SyncWorker (QThread)
+        self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self._lock = threading.RLock()  # Verhindert gleichzeitige Schreibzugriffe
         self.init_db()
 
     def init_db(self):
-        with self.conn:
+        with self._lock, self.conn:
             self.conn.executescript("""
                 CREATE TABLE IF NOT EXISTS messen (id INTEGER PRIMARY KEY, flipper_id INTEGER UNIQUE, name TEXT, ort TEXT);
                 CREATE TABLE IF NOT EXISTS kategorien (id INTEGER PRIMARY KEY, flipper_id INTEGER UNIQUE, name TEXT UNIQUE);
@@ -109,187 +123,165 @@ class Database:
                 );
             """)
 
-            # --- AUTOMATISCHE MIGRATION ---
-            # 1. 'ort' in 'messen'
-            cols = [r["name"] for r in self.conn.execute("PRAGMA table_info(messen)").fetchall()]
-            if "ort" not in cols: self.conn.execute("ALTER TABLE messen ADD COLUMN ort TEXT")
-            if "flipper_id" not in cols: self.conn.execute("ALTER TABLE messen ADD COLUMN flipper_id INTEGER UNIQUE")
-
-            # 2. 'flipper_id' in 'kategorien'
-            cols = [r["name"] for r in self.conn.execute("PRAGMA table_info(kategorien)").fetchall()]
-            if "flipper_id" not in cols: self.conn.execute(
-                "ALTER TABLE kategorien ADD COLUMN flipper_id INTEGER UNIQUE")
-
-            # 3. 'kategorie_id' in 'kunden' (Migration von 'kategorie' Text zu ID)
-            cols = [r["name"] for r in self.conn.execute("PRAGMA table_info(kunden)").fetchall()]
-            if "kategorie_id" not in cols:
-                self.conn.execute("ALTER TABLE kunden ADD COLUMN kategorie_id INTEGER")
-                if "kategorie" in cols:  # Alte Spalte existiert noch
-                    for row in self.conn.execute("SELECT id, kategorie FROM kunden").fetchall():
-                        if row["kategorie"]:
-                            self.conn.execute("INSERT OR IGNORE INTO kategorien (name) VALUES (?)", (row["kategorie"],))
-                            kid = \
-                            self.conn.execute("SELECT id FROM kategorien WHERE name=?", (row["kategorie"],)).fetchone()[
-                                "id"]
-                            self.conn.execute("UPDATE kunden SET kategorie_id=? WHERE id=?", (kid, row["id"]))
-
-            # Standard-Kategorien falls leer
             if not self.conn.execute("SELECT 1 FROM kategorien LIMIT 1").fetchone():
                 for cat in ["Interessiert", "Anfrage", "Auftrag"]:
                     self.conn.execute("INSERT INTO kategorien (name) VALUES (?)", (cat,))
 
     def _get_or_create(self, table, **kwargs):
-        cols = ", ".join(kwargs.keys())
-        placeholders = ", ".join("?" * len(kwargs))
-        cur = self.conn.execute(f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({placeholders})",
-                                list(kwargs.values()))
-        if cur.lastrowid and cur.rowcount > 0: return cur.lastrowid
-        where = " AND ".join(f"{k}=?" for k in kwargs.keys())
-        return self.conn.execute(f"SELECT id FROM {table} WHERE {where}", list(kwargs.values())).fetchone()[0]
+        with self._lock:
+            cols = ", ".join(kwargs.keys())
+            placeholders = ", ".join("?" * len(kwargs))
+            cur = self.conn.execute(f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({placeholders})",
+                                    list(kwargs.values()))
+            if cur.lastrowid and cur.rowcount > 0: return cur.lastrowid
+            where = " AND ".join(f"{k}=?" for k in kwargs.keys())
+            return self.conn.execute(f"SELECT id FROM {table} WHERE {where}", list(kwargs.values())).fetchone()[0]
 
     def get_messen(self):
-        return self.conn.execute("SELECT * FROM messen ORDER BY name").fetchall()
+        with self._lock:
+            return self.conn.execute("SELECT * FROM messen ORDER BY name").fetchall()
 
     def get_kategorien(self):
-        return self.conn.execute("SELECT * FROM kategorien ORDER BY name").fetchall()
+        with self._lock:
+            return self.conn.execute("SELECT * FROM kategorien ORDER BY name").fetchall()
 
     def import_flipper_data(self, data):
-        # 1. Kategorien
-        if data.get("config"):
-            for line in data["config"].splitlines():
-                line = line.strip()
-                if not line: continue
-                if "|" in line:
-                    fid_str, name = line.split("|", 1)
-                    fid = int(fid_str)
+        with self._lock:
+            if data.get("config"):
+                for line in data["config"].splitlines():
+                    line = line.strip()
+                    if not line: continue
+                    if "|" in line:
+                        fid_str, name = line.split("|", 1)
+                        fid = int(fid_str)
+                        self.conn.execute(
+                            "INSERT INTO kategorien (flipper_id, name) VALUES (?, ?) ON CONFLICT(flipper_id) DO UPDATE SET name=excluded.name",
+                            (fid, name))
+                    else:
+                        self.conn.execute("INSERT OR IGNORE INTO kategorien (name) VALUES (?)", (line,))
+
+            messe_map = {}
+            for filename, text in data.get("messen", {}).items():
+                display_name = filename
+                fid = None
+                for line in text.splitlines():
+                    if line.startswith("ID="):
+                        fid = int(line[3:])
+                    elif line.startswith("NAME="):
+                        display_name = line[5:].strip()
+
+                if fid is not None:
                     self.conn.execute(
-                        "INSERT INTO kategorien (flipper_id, name) VALUES (?, ?) ON CONFLICT(flipper_id) DO UPDATE SET name=excluded.name",
-                        (fid, name))
+                        "INSERT INTO messen (flipper_id, name) VALUES (?, ?) ON CONFLICT(flipper_id) DO UPDATE SET name=excluded.name",
+                        (fid, display_name))
+                    row = self.conn.execute("SELECT id FROM messen WHERE flipper_id=?", (fid,)).fetchone()
+                    if row: messe_map[fid] = row["id"]
                 else:
-                    self.conn.execute("INSERT OR IGNORE INTO kategorien (name) VALUES (?)", (line,))
+                    mid = self._get_or_create("messen", name=display_name)
 
-        # 2. Messen
-        messe_map = {}  # Flipper-ID -> Lokale DB ID
-        for filename, text in data.get("messen", {}).items():
-            display_name = filename
-            fid = None
-            for line in text.splitlines():
-                if line.startswith("ID="):
-                    fid = int(line[3:])
-                elif line.startswith("NAME="):
-                    display_name = line[5:].strip()
+            for date_str, text in data.get("days", {}).items():
+                lines = text.splitlines()
+                messe_val = "Unbekannt"
+                events, kunden, merch_actions = [], [], []
 
-            if fid is not None:
-                self.conn.execute(
-                    "INSERT INTO messen (flipper_id, name) VALUES (?, ?) ON CONFLICT(flipper_id) DO UPDATE SET name=excluded.name",
-                    (fid, display_name))
-                row = self.conn.execute("SELECT id FROM messen WHERE flipper_id=?", (fid,)).fetchone()
-                if row: messe_map[fid] = row["id"]
-            else:
-                mid = self._get_or_create("messen", name=display_name)
+                for line in lines:
+                    if line.startswith("MESSE "):
+                        messe_val = line[6:].strip()
+                    elif line.startswith("BETRETEN ") or line.startswith("VERLASSEN "):
+                        parts = line.split(" ", 1)
+                        events.append({"typ": parts[0], "zeit": parts[1]})
+                    elif line.startswith("KUNDE|"):
+                        p = line.split("|")
+                        if len(p) >= 7:
+                            kunden.append({
+                                "flipper_id": p[1].lstrip("#"), "zeit": f"{p[2]} {p[3]}:00",
+                                "kategorie_raw": p[4], "name": p[5],
+                                "firma": p[6] if len(p) >= 10 else "",
+                                "email": p[7] if len(p) >= 10 else "",
+                                "telefon": p[8] if len(p) >= 10 else "",
+                                "notiz": p[9] if len(p) >= 10 else (p[6] if len(p) < 10 else "")
+                            })
+                    elif line.startswith("MERCH "):
+                        p = line.split(" ", 2)
+                        if len(p) == 3:
+                            name, _, val = p[2].rpartition(";")
+                            try:
+                                merch_actions.append(
+                                    {"aktion": p[1], "name": name, "wert": int(val), "zeit": date_str + " 12:00:00"})
+                            except ValueError:
+                                pass
 
-        # 3. Tage
-        for date_str, text in data.get("days", {}).items():
-            lines = text.splitlines()
-            messe_val = "Unbekannt"
-            events, kunden, merch_actions = [], [], []
-
-            for line in lines:
-                if line.startswith("MESSE "):
-                    messe_val = line[6:].strip()
-                elif line.startswith("BETRETEN ") or line.startswith("VERLASSEN "):
-                    parts = line.split(" ", 1)
-                    events.append({"typ": parts[0], "zeit": parts[1]})
-                elif line.startswith("KUNDE|"):
-                    p = line.split("|")
-                    if len(p) >= 7:
-                        kunden.append({
-                            "flipper_id": p[1].lstrip("#"), "zeit": f"{p[2]} {p[3]}:00",
-                            "kategorie_raw": p[4], "name": p[5],
-                            "firma": p[6] if len(p) >= 10 else "",
-                            "email": p[7] if len(p) >= 10 else "",
-                            "telefon": p[8] if len(p) >= 10 else "",
-                            "notiz": p[9] if len(p) >= 10 else (p[6] if len(p) < 10 else "")
-                        })
-                elif line.startswith("MERCH "):
-                    p = line.split(" ", 2)
-                    if len(p) == 3:
-                        name, _, val = p[2].rpartition(";")
-                        try:
-                            merch_actions.append(
-                                {"aktion": p[1], "name": name, "wert": int(val), "zeit": date_str + " 12:00:00"})
-                        except ValueError:
-                            pass
-
-            # Messe ID auflösen
-            try:
-                fid = int(messe_val)
-                messe_id = messe_map.get(fid)
-            except ValueError:
-                row = self.conn.execute("SELECT id FROM messen WHERE name=?", (messe_val,)).fetchone()
-                messe_id = row["id"] if row else None
-
-            if not messe_id:
-                messe_id = self._get_or_create("messen", name=messe_val)
-
-            tage_id = self._get_or_create("tage", messe_id=messe_id, datum=date_str)
-
-            for ev in events:
-                self.conn.execute("INSERT OR IGNORE INTO anwesenheit (tage_id, typ, zeit) VALUES (?, ?, ?)",
-                                  (tage_id, ev["typ"], ev["zeit"]))
-
-            for k in kunden:
-                # Kategorie ID auflösen
                 try:
-                    cat_fid = int(k["kategorie_raw"])
-                    cat_row = self.conn.execute("SELECT id FROM kategorien WHERE flipper_id=?", (cat_fid,)).fetchone()
-                    cat_id = cat_row["id"] if cat_row else None
+                    fid = int(messe_val)
+                    messe_id = messe_map.get(fid)
                 except ValueError:
-                    cat_row = self.conn.execute("SELECT id FROM kategorien WHERE name=?",
-                                                (k["kategorie_raw"],)).fetchone()
-                    cat_id = cat_row["id"] if cat_row else None
+                    row = self.conn.execute("SELECT id FROM messen WHERE name=?", (messe_val,)).fetchone()
+                    messe_id = row["id"] if row else None
 
-                if cat_id is None:
-                    self.conn.execute("INSERT OR IGNORE INTO kategorien (name) VALUES (?)", (k["kategorie_raw"],))
-                    cat_id = \
-                    self.conn.execute("SELECT id FROM kategorien WHERE name=?", (k["kategorie_raw"],)).fetchone()["id"]
+                if not messe_id:
+                    messe_id = self._get_or_create("messen", name=messe_val)
 
-                am_stand = 0
-                last_ev = None
+                tage_id = self._get_or_create("tage", messe_id=messe_id, datum=date_str)
+
                 for ev in events:
-                    if ev["zeit"] <= k["zeit"]: last_ev = ev
-                if last_ev and last_ev["typ"] == "BETRETEN": am_stand = 1
+                    self.conn.execute("INSERT OR IGNORE INTO anwesenheit (tage_id, typ, zeit) VALUES (?, ?, ?)",
+                                      (tage_id, ev["typ"], ev["zeit"]))
 
-                self.conn.execute("""
-                    INSERT OR IGNORE INTO kunden (tage_id, flipper_id, zeit, kategorie_id, name, firma, email, telefon, notiz, am_stand)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (tage_id, k["flipper_id"], k["zeit"], cat_id, k["name"], k["firma"], k["email"], k["telefon"],
-                      k["notiz"], am_stand))
+                for k in kunden:
+                    try:
+                        cat_fid = int(k["kategorie_raw"])
+                        cat_row = self.conn.execute("SELECT id FROM kategorien WHERE flipper_id=?",
+                                                    (cat_fid,)).fetchone()
+                        cat_id = cat_row["id"] if cat_row else None
+                    except ValueError:
+                        cat_row = self.conn.execute("SELECT id FROM kategorien WHERE name=?",
+                                                    (k["kategorie_raw"],)).fetchone()
+                        cat_id = cat_row["id"] if cat_row else None
 
-            for ma in merch_actions:
-                art_id = self._get_or_create("merch_artikel", messe_id=messe_id, name=ma["name"])
-                self.conn.execute(
-                    "INSERT INTO merch_aktionen (artikel_id, tage_id, zeit, aktion, wert) VALUES (?, ?, ?, ?, ?)",
-                    (art_id, tage_id, ma["zeit"], ma["aktion"], ma["wert"]))
+                    if cat_id is None:
+                        self.conn.execute("INSERT OR IGNORE INTO kategorien (name) VALUES (?)", (k["kategorie_raw"],))
+                        cat_id = \
+                        self.conn.execute("SELECT id FROM kategorien WHERE name=?", (k["kategorie_raw"],)).fetchone()[
+                            "id"]
 
-            self.conn.commit()
+                    am_stand = 0
+                    last_ev = None
+                    for ev in events:
+                        if ev["zeit"] <= k["zeit"]: last_ev = ev
+                    if last_ev and last_ev["typ"] == "BETRETEN": am_stand = 1
+
+                    self.conn.execute("""
+                        INSERT OR IGNORE INTO kunden (tage_id, flipper_id, zeit, kategorie_id, name, firma, email, telefon, notiz, am_stand)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (tage_id, k["flipper_id"], k["zeit"], cat_id, k["name"], k["firma"], k["email"], k["telefon"],
+                          k["notiz"], am_stand))
+
+                for ma in merch_actions:
+                    art_id = self._get_or_create("merch_artikel", messe_id=messe_id, name=ma["name"])
+                    self.conn.execute(
+                        "INSERT INTO merch_aktionen (artikel_id, tage_id, zeit, aktion, wert) VALUES (?, ?, ?, ?, ?)",
+                        (art_id, tage_id, ma["zeit"], ma["aktion"], ma["wert"]))
+
+                self.conn.commit()
 
     def get_kunden(self, messe_id=None):
-        sql = """SELECT k.*, t.datum, m.name as messe_name, c.name as kategorie_name 
-                 FROM kunden k 
-                 JOIN tage t ON k.tage_id = t.id 
-                 JOIN messen m ON t.messe_id = m.id 
-                 LEFT JOIN kategorien c ON k.kategorie_id = c.id"""
-        params = []
-        if messe_id:
-            sql += " WHERE m.id = ?"
-            params.append(messe_id)
-        sql += " ORDER BY k.zeit DESC"
-        return self.conn.execute(sql, params).fetchall()
+        with self._lock:
+            sql = """SELECT k.*, t.datum, m.name as messe_name, c.name as kategorie_name 
+                     FROM kunden k 
+                     JOIN tage t ON k.tage_id = t.id 
+                     JOIN messen m ON t.messe_id = m.id 
+                     LEFT JOIN kategorien c ON k.kategorie_id = c.id"""
+            params = []
+            if messe_id:
+                sql += " WHERE m.id = ?"
+                params.append(messe_id)
+            sql += " ORDER BY k.zeit DESC"
+            return self.conn.execute(sql, params).fetchall()
 
     def get_merch(self, messe_id):
-        sql = "SELECT a.id, a.name, (SELECT wert FROM merch_aktionen m2 WHERE m2.artikel_id = a.id ORDER BY zeit DESC, id DESC LIMIT 1) as bestand FROM merch_artikel a WHERE a.messe_id = ?"
-        return self.conn.execute(sql, (messe_id,)).fetchall()
+        with self._lock:
+            sql = "SELECT a.id, a.name, (SELECT wert FROM merch_aktionen m2 WHERE m2.artikel_id = a.id ORDER BY zeit DESC, id DESC LIMIT 1) as bestand FROM merch_artikel a WHERE a.messe_id = ?"
+            return self.conn.execute(sql, (messe_id,)).fetchall()
 
 
 class FlipperCLI:
@@ -328,18 +320,42 @@ class FlipperCLI:
             result = re.sub(r'^Size:\s*\d+\s*\n', '', result, flags=re.IGNORECASE).strip()
         return result
 
+    def write_file(self, path, content):
+        self.command(f"storage remove {path}")
+        time.sleep(0.1)
+        self.ser.reset_input_buffer()
+        self.ser.write((f"storage write {path}\r\n").encode())
+        time.sleep(0.2)
+        self._drain()
+
+        data = content.encode('utf-8')
+        chunk_size = 128
+        for i in range(0, len(data), chunk_size):
+            self.ser.write(data[i:i + chunk_size])
+            self.ser.flush()
+            time.sleep(0.02)
+            self._drain()
+
+        self.ser.write(b"\x03")
+        time.sleep(0.2)
+        self._drain()
+        self.log(f"Datei geschrieben: {path}")
+
     def close(self):
         self.ser.close()
 
 
-class FetchWorker(QThread):
+class SyncWorker(QThread):
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
     log = pyqtSignal(str)
+    mode = "pull"
 
-    def __init__(self, port):
+    def __init__(self, port, mode="pull", db=None):
         super().__init__()
         self.port = port
+        self.mode = mode
+        self.db = db
 
     def run(self):
         try:
@@ -352,23 +368,61 @@ class FetchWorker(QThread):
             self.log.emit(f"Verbinde mit {self.port} …")
             cli = FlipperCLI(self.port, self.log.emit)
             try:
-                data = {"days": {}, "messen": {}, "config": ""}
-                self.log.emit("Lese Kategorien …")
-                data["config"] = cli.command(f"storage read {CONFIG_PATH}")
+                if self.mode == "pull":
+                    data = {"days": {}, "messen": {}, "config": ""}
+                    self.log.emit("Lese Kategorien …")
+                    data["config"] = cli.command(f"storage read {CONFIG_PATH}")
 
-                self.log.emit("Lese Messen …")
-                out = cli.command(f"storage list {MESSEN_DIR}")
-                m_files = [l.split("] ")[1].rsplit(" ", 1)[0] for l in out.split('\n') if l.strip().startswith("[F]")]
-                for f in m_files:
-                    data["messen"][f.replace(".txt", "")] = cli.command(f"storage read {MESSEN_DIR}/{f}")
+                    self.log.emit("Lese Messen …")
+                    out = cli.command(f"storage list {MESSEN_DIR}")
+                    m_files = [l.split("] ")[1].rsplit(" ", 1)[0] for l in out.split('\n') if
+                               l.strip().startswith("[F]")]
+                    for f in m_files:
+                        data["messen"][f.replace(".txt", "")] = cli.command(f"storage read {MESSEN_DIR}/{f}")
 
-                self.log.emit("Lese Tage …")
-                out = cli.command(f"storage list {DAYS_DIR}")
-                d_files = [l.split("] ")[1].rsplit(" ", 1)[0] for l in out.split('\n') if l.strip().startswith("[F]")]
-                for f in d_files:
-                    data["days"][f.replace(".txt", "")] = cli.command(f"storage read {DAYS_DIR}/{f}")
+                    self.log.emit("Lese Tage …")
+                    out = cli.command(f"storage list {DAYS_DIR}")
+                    d_files = [l.split("] ")[1].rsplit(" ", 1)[0] for l in out.split('\n') if
+                               l.strip().startswith("[F]")]
+                    for f in d_files:
+                        data["days"][f.replace(".txt", "")] = cli.command(f"storage read {DAYS_DIR}/{f}")
+                    self.finished.emit(data)
 
-                self.finished.emit(data)
+                elif self.mode == "push":
+                    self.log.emit("--- PUSH ZUM FLIPPER GESTARTET ---")
+
+                    lines = []
+                    kats = self.db.get_kategorien()
+                    messen = self.db.get_messen()
+
+                    with self.db._lock:
+                        for k in kats:
+                            fid = k["flipper_id"] if k["flipper_id"] is not None else k["id"]
+                            lines.append(f"{fid}|{k['name']}")
+                            if k["flipper_id"] is None:
+                                self.db.conn.execute("UPDATE kategorien SET flipper_id=? WHERE id=?", (fid, k["id"]))
+
+                        config_content = "\n".join(lines) + "\n"
+                        cli.write_file(CONFIG_PATH, config_content)
+
+                        for m in messen:
+                            fid = m["flipper_id"] if m["flipper_id"] is not None else m["id"]
+                            if m["flipper_id"] is None:
+                                self.db.conn.execute("UPDATE messen SET flipper_id=? WHERE id=?", (fid, m["id"]))
+
+                            slug = sanitize_name(m["name"])
+                            m_lines = [f"ID={fid}", f"NAME={m['name']}"]
+
+                            for art in self.db.get_merch(m["id"]):
+                                m_lines.append(f"PRODUKT {art['name']}")
+
+                            content = "\n".join(m_lines) + "\n"
+                            cli.write_file(f"{MESSEN_DIR}/{slug}.txt", content)
+
+                        self.db.conn.commit()
+
+                    self.log.emit("--- PUSH ERFOLGREICH ABGESCHLOSSEN ---")
+                    self.finished.emit({"status": "push_ok"})
             finally:
                 cli.close()
         except Exception as e:
@@ -430,13 +484,19 @@ class DashboardTab(QWidget):
         super().__init__()
         self.main = main
         v = QVBoxLayout(self)
+
         h = QHBoxLayout()
         self.port_combo = QComboBox()
-        self.btn_sync = QPushButton("Verbinden & Synchronisieren")
-        self.btn_sync.clicked.connect(self.sync)
+        self.btn_pull = QPushButton("Pull (Daten empfangen)")
+        self.btn_pull.clicked.connect(lambda: self.sync("pull"))
+        self.btn_push = QPushButton("Push (Daten senden)")
+        self.btn_push.setObjectName("Ghost")
+        self.btn_push.clicked.connect(lambda: self.sync("push"))
+
         h.addWidget(QLabel("Port:"));
-        h.addWidget(self.port_combo, 1);
-        h.addWidget(self.btn_sync)
+        h.addWidget(self.port_combo, 1)
+        h.addWidget(self.btn_pull);
+        h.addWidget(self.btn_push)
         v.addLayout(h)
 
         h_stats = QHBoxLayout()
@@ -469,21 +529,28 @@ class DashboardTab(QWidget):
         self.stat_cards["tage"].setText(str(tage))
         self.stat_cards["stand"].setText(str(am_stand))
 
-    def sync(self):
+    def sync(self, mode):
         port = self.port_combo.currentData()
-        self.btn_sync.setEnabled(False);
+        self.btn_pull.setEnabled(False)
+        self.btn_push.setEnabled(False)
         self.log_view.clear()
-        self.worker = FetchWorker(port)
+
+        self.worker = SyncWorker(port, mode, self.main.db)
         self.worker.log.connect(self.log_view.append)
         self.worker.error.connect(lambda e: QMessageBox.critical(self, "Fehler", e))
         self.worker.finished.connect(self._on_sync_done)
-        self.worker.finished.connect(lambda: self.btn_sync.setEnabled(True))
-        self.worker.error.connect(lambda: self.btn_sync.setEnabled(True))
+        self.worker.finished.connect(lambda: self.btn_pull.setEnabled(True))
+        self.worker.finished.connect(lambda: self.btn_push.setEnabled(True))
+        self.worker.error.connect(lambda: self.btn_pull.setEnabled(True))
+        self.worker.error.connect(lambda: self.btn_push.setEnabled(True))
         self.worker.start()
 
     def _on_sync_done(self, data):
-        self.main.db.import_flipper_data(data)
-        self.log_view.append("✅ Synchronisation abgeschlossen.")
+        if data.get("status") == "push_ok":
+            self.log_view.append("✅ Push abgeschlossen. Der Flipper ist nun aktuell.")
+        else:
+            self.main.db.import_flipper_data(data)
+            self.log_view.append("✅ Pull abgeschlossen. Datenbank wurde aktualisiert.")
         self.main.refresh_all()
 
 
@@ -493,7 +560,6 @@ class SettingsTab(QWidget):
         self.main = main
         v = QVBoxLayout(self)
 
-        # Messen
         m_box = QGroupBox("Messen")
         ml = QVBoxLayout(m_box)
         mh = QHBoxLayout()
@@ -517,7 +583,6 @@ class SettingsTab(QWidget):
         ml.addWidget(self.m_table)
         v.addWidget(m_box)
 
-        # Kategorien
         k_box = QGroupBox("Kategorien")
         kl = QVBoxLayout(k_box)
         kh = QHBoxLayout()
@@ -537,7 +602,6 @@ class SettingsTab(QWidget):
         kl.addWidget(self.k_table)
         v.addWidget(k_box)
 
-        # Export
         e_box = QGroupBox("Export")
         el = QVBoxLayout(e_box)
         btn_csv = QPushButton("Kunden als CSV exportieren");
@@ -554,14 +618,14 @@ class SettingsTab(QWidget):
         for r, m in enumerate(messen):
             self.m_table.setItem(r, 0, QTableWidgetItem(m["name"]))
             self.m_table.setItem(r, 1, QTableWidgetItem(m["ort"] or ""))
-            self.m_table.setItem(r, 2, QTableWidgetItem(str(m["flipper_id"]) if m["flipper_id"] else "-"))
+            self.m_table.setItem(r, 2, QTableWidgetItem(str(m["flipper_id"]) if m["flipper_id"] else "Neu"))
             self.m_table.item(r, 0).setData(Qt.UserRole, m["id"])
 
         kats = self.main.db.get_kategorien()
         self.k_table.setRowCount(len(kats))
         for r, k in enumerate(kats):
             self.k_table.setItem(r, 0, QTableWidgetItem(k["name"]))
-            self.k_table.setItem(r, 1, QTableWidgetItem(str(k["flipper_id"]) if k["flipper_id"] else "-"))
+            self.k_table.setItem(r, 1, QTableWidgetItem(str(k["flipper_id"]) if k["flipper_id"] else "Neu"))
             self.k_table.item(r, 0).setData(Qt.UserRole, k["id"])
 
     def add_messe(self):
