@@ -28,11 +28,14 @@
 #define MESSE_NAME_LEN 32
 #define MESSE_DISPLAY_LEN 48
 #define CUSTOMER_NAME_LEN 48
+#define CUSTOMER_COMPANY_LEN 48
+#define CUSTOMER_EMAIL_LEN 64
+#define CUSTOMER_PHONE_LEN 24
 #define CUSTOMER_DESC_LEN 64
 #define PRODUCT_NAME_LEN 32
 #define TEXT_BUF_LEN 64
 #define HEADER_BUF_LEN 80
-#define LINE_BUF 256
+#define LINE_BUF 384
 #define MAX_READ_SIZE (64 * 1024)
 
 #define CUSTOM_EVENT_TEXT_INPUT_DONE 100
@@ -113,6 +116,7 @@ typedef enum {
 typedef enum {
     MyAppSettingsIndexManageMessen,
     MyAppSettingsIndexEditCategories,
+    MyAppSettingsIndexUsbInfo,
 } MyAppSettingsIndex;
 
 typedef enum {
@@ -176,6 +180,9 @@ typedef enum {
     MyAppTextInputPurposeNone,
     MyAppTextInputPurposeDayName,
     MyAppTextInputPurposeCustomerName,
+    MyAppTextInputPurposeCustomerCompany,
+    MyAppTextInputPurposeCustomerEmail,
+    MyAppTextInputPurposeCustomerPhone,
     MyAppTextInputPurposeCustomerDesc,
     MyAppTextInputPurposeNewCategory,
     MyAppTextInputPurposeEditCategory,
@@ -216,6 +223,7 @@ typedef enum {
     MyAppPopupKindMesseSaved,
     MyAppPopupKindErrorEmptyName,
     MyAppPopupKindRefillBelowCurrent,
+    MyAppPopupKindUsbInfo,
 } MyAppPopupKind;
 
 typedef enum {
@@ -263,6 +271,7 @@ typedef struct {
 
     char text_buffer[TEXT_BUF_LEN];
     char text_input_header[HEADER_BUF_LEN];
+    char usb_info_text[256];
     MyAppTextInputPurpose text_input_purpose;
 
     /* Aktueller Tag */
@@ -273,6 +282,9 @@ typedef struct {
 
     /* Aktueller Kunde (während Anlage) */
     char current_customer[CUSTOMER_NAME_LEN];
+    char current_customer_company[CUSTOMER_COMPANY_LEN];
+    char current_customer_email[CUSTOMER_EMAIL_LEN];
+    char current_customer_phone[CUSTOMER_PHONE_LEN];
     char current_customer_desc[CUSTOMER_DESC_LEN];
 
     /* Kategorien */
@@ -935,18 +947,25 @@ static void add_customer(MyApp* app, const char* category) {
     const char* name = app->current_customer[0] ? app->current_customer : "Anonym";
 
     char safe_name[CUSTOMER_NAME_LEN];
+    char safe_company[CUSTOMER_COMPANY_LEN];
+    char safe_email[CUSTOMER_EMAIL_LEN];
+    char safe_phone[CUSTOMER_PHONE_LEN];
     char safe_desc[CUSTOMER_DESC_LEN];
     char safe_cat[CATEGORY_LEN];
     sanitize_field(name, safe_name, sizeof(safe_name));
+    sanitize_field(app->current_customer_company, safe_company, sizeof(safe_company));
+    sanitize_field(app->current_customer_email, safe_email, sizeof(safe_email));
+    sanitize_field(app->current_customer_phone, safe_phone, sizeof(safe_phone));
     sanitize_field(app->current_customer_desc, safe_desc, sizeof(safe_desc));
     sanitize_field(category, safe_cat, sizeof(safe_cat));
 
     char line[LINE_BUF];
-    snprintf(line, sizeof(line), "KUNDE|#%04u|%04u-%02u-%02u|%02u:%02u|%s|%s|%s\n",
+    snprintf(line, sizeof(line),
+             "KUNDE|#%04u|%04u-%02u-%02u|%02u:%02u|%s|%s|%s|%s|%s|%s\n",
              (unsigned)app->next_customer_id,
              (unsigned)dt.year, (unsigned)dt.month, (unsigned)dt.day,
              (unsigned)new_hour, (unsigned)new_min,
-             safe_cat, safe_name, safe_desc);
+             safe_cat, safe_name, safe_company, safe_email, safe_phone, safe_desc);
     write_log_line(app->current_day, line);
 
     app->next_customer_id++;
@@ -1013,6 +1032,47 @@ static void merch_bulk_advance_or_finish(MyApp* app) {
         app->pending_merch_bulk_continue = true;
     }
     scene_manager_search_and_switch_to_previous_scene(app->scene_manager, MyAppSceneMerchMenu);
+}
+
+/* =====================================================================
+ *  USB / SD-Info
+ * ===================================================================== */
+static void build_usb_info_text(MyApp* app) {
+    char label[34] = "?";
+    float capacity_gb = 0.0f;
+
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+    SDInfo sd_info;
+    memset(&sd_info, 0, sizeof(sd_info));
+    FS_Error error = storage_sd_info(storage, &sd_info);
+    furi_record_close(RECORD_STORAGE);
+
+    if(error == FSE_OK) {
+        snprintf(label, sizeof(label), "%s", sd_info.label);
+        capacity_gb = (float)sd_info.kb_total / (1024.0f * 1024.0f);
+    }
+
+    bool usb_plugged = furi_hal_power_is_charging();
+
+    if(usb_plugged) {
+        snprintf(app->usb_info_text, sizeof(app->usb_info_text),
+            "USB: verbunden\n\n"
+            "SD-Label: %s\n"
+            "Groesse: %.1f GB\n\n"
+            "Am PC im Explorer nach\n"
+            "dem Laufwerk mit diesem\n"
+            "Namen suchen.",
+            label, (double)capacity_gb);
+    } else {
+        snprintf(app->usb_info_text, sizeof(app->usb_info_text),
+            "USB: nicht angesteckt\n\n"
+            "SD-Label: %s\n"
+            "Groesse: %.1f GB\n\n"
+            "Am PC erscheint das\n"
+            "Laufwerk als\n"
+            "\"%s (E:)\" o. ae.",
+            label, (double)capacity_gb, label);
+    }
 }
 
 /* =====================================================================
@@ -1168,6 +1228,9 @@ bool my_app_scene_day_menu_on_event(void* context, SceneManagerEvent event) {
             consumed = true;
         } else if(event.event == MyAppDayMenuIndexAddCustomer) {
             app->current_customer[0] = '\0';
+            app->current_customer_company[0] = '\0';
+            app->current_customer_email[0] = '\0';
+            app->current_customer_phone[0] = '\0';
             app->current_customer_desc[0] = '\0';
             app->text_input_purpose = MyAppTextInputPurposeCustomerName;
             app->text_buffer[0] = '\0';
@@ -1597,10 +1660,16 @@ void my_app_scene_popup_on_enter(void* context) {
     switch(app->popup_kind) {
     case MyAppPopupKindCustomerSaved: {
         const char* name = app->current_customer[0] ? app->current_customer : "Anonym";
-        char text[160];
-        snprintf(text, sizeof(text), "#%04u\n%s\n%s",
-                 (unsigned)(app->next_customer_id - 1), name,
-                 app->current_customer_desc[0] ? app->current_customer_desc : "");
+        const char* company = app->current_customer_company;
+        const char* email = app->current_customer_email;
+        const char* phone = app->current_customer_phone;
+        char text[192];
+        snprintf(text, sizeof(text), "#%04u\n%s\n%s\n%s\n%s",
+                 (unsigned)(app->next_customer_id - 1),
+                 name,
+                 company[0] ? company : "",
+                 email[0] ? email : "",
+                 phone[0] ? phone : "");
         popup_set_header(app->popup, "Kunde gespeichert", 64, 3, AlignCenter, AlignTop);
         popup_set_text(app->popup, text, 5, 22, AlignLeft, AlignTop);
         break;
@@ -1664,6 +1733,10 @@ void my_app_scene_popup_on_enter(void* context) {
         popup_set_text(app->popup, "Wert kleiner als\naktueller Bestand.\nNicht uebernommen.",
                        5, 22, AlignLeft, AlignTop);
         break;
+    case MyAppPopupKindUsbInfo:
+        popup_set_header(app->popup, "USB / SD", 64, 3, AlignCenter, AlignTop);
+        popup_set_text(app->popup, app->usb_info_text, 5, 22, AlignLeft, AlignTop);
+        break;
     default:
         popup_set_header(app->popup, "Info", 64, 3, AlignCenter, AlignTop);
         popup_set_text(app->popup, "", 5, 22, AlignLeft, AlignTop);
@@ -1707,6 +1780,8 @@ void my_app_scene_settings_on_enter(void* context) {
                      MyAppSettingsIndexManageMessen, my_app_settings_callback, app);
     submenu_add_item(app->settings_menu, "Kategorien bearbeiten",
                      MyAppSettingsIndexEditCategories, my_app_settings_callback, app);
+    submenu_add_item(app->settings_menu, "USB / SD-Info",
+                     MyAppSettingsIndexUsbInfo, my_app_settings_callback, app);
     view_dispatcher_switch_to_view(app->view_dispatcher, MyAppViewSettings);
 }
 
@@ -1719,6 +1794,13 @@ bool my_app_scene_settings_on_event(void* context, SceneManagerEvent event) {
             consumed = true;
         } else if(event.event == MyAppSettingsIndexEditCategories) {
             scene_manager_next_scene(app->scene_manager, MyAppSceneEditCategories);
+            consumed = true;
+        } else if(event.event == MyAppSettingsIndexUsbInfo) {
+            build_usb_info_text(app);
+            app->popup_kind = MyAppPopupKindUsbInfo;
+            app->popup_has_return = true;
+            app->popup_return_scene = MyAppSceneSettings;
+            scene_manager_next_scene(app->scene_manager, MyAppScenePopup);
             consumed = true;
         }
     }
@@ -1984,10 +2066,19 @@ void my_app_scene_text_input_on_enter(void* context) {
         clear_default = false;
         break;
     case MyAppTextInputPurposeCustomerName:
-        header = "Kundenname (leer=Anonym):";
+        header = "Name (leer=Anonym):";
+        break;
+    case MyAppTextInputPurposeCustomerCompany:
+        header = "Firma:";
+        break;
+    case MyAppTextInputPurposeCustomerEmail:
+        header = "E-Mail:";
+        break;
+    case MyAppTextInputPurposeCustomerPhone:
+        header = "Telefon:";
         break;
     case MyAppTextInputPurposeCustomerDesc:
-        header = "Beschreibung (optional):";
+        header = "Notiz (optional):";
         break;
     case MyAppTextInputPurposeNewCategory:
         header = "Neue Kategorie:";
@@ -2109,6 +2200,27 @@ bool my_app_scene_text_input_on_event(void* context, SceneManagerEvent event) {
 
         case MyAppTextInputPurposeCustomerName:
             safe_copy(app->current_customer, app->text_buffer, CUSTOMER_NAME_LEN);
+            app->text_input_purpose = MyAppTextInputPurposeCustomerCompany;
+            app->text_buffer[0] = '\0';
+            scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
+            break;
+
+        case MyAppTextInputPurposeCustomerCompany:
+            safe_copy(app->current_customer_company, app->text_buffer, CUSTOMER_COMPANY_LEN);
+            app->text_input_purpose = MyAppTextInputPurposeCustomerEmail;
+            app->text_buffer[0] = '\0';
+            scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
+            break;
+
+        case MyAppTextInputPurposeCustomerEmail:
+            safe_copy(app->current_customer_email, app->text_buffer, CUSTOMER_EMAIL_LEN);
+            app->text_input_purpose = MyAppTextInputPurposeCustomerPhone;
+            app->text_buffer[0] = '\0';
+            scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
+            break;
+
+        case MyAppTextInputPurposeCustomerPhone:
+            safe_copy(app->current_customer_phone, app->text_buffer, CUSTOMER_PHONE_LEN);
             app->text_input_purpose = MyAppTextInputPurposeCustomerDesc;
             app->text_buffer[0] = '\0';
             scene_manager_next_scene(app->scene_manager, MyAppSceneTextInput);
